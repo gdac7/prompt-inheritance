@@ -58,7 +58,7 @@ class LocalModelTransformers():
                 inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
 
             if isinstance(inputs, dict):
-                outputs_ids = self.model.generate(**inputs, **generation_params)
+                output_ids = self.model.generate(**inputs, **generation_params)
                 input_length = inputs['input_ids'].shape[1]
             else:
                 attention_mask = torch.ones_like(inputs)
