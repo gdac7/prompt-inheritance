@@ -38,7 +38,17 @@
 - Testar com ICA
   - Irá encontrar componentes independentes
 - Testar com LCA + PCA
-- Testar com filtro de perplexidade
+  - Irá fazer uma espécie de feature engineering antes
+  - Para cada um dos $N_{i}$ scores nos N prompts, pegaremos o score original e binarizamos (> 8.0 -> 1) senão 0
+  - Treinaremos o LCA nessas features 0/1. O LCA dividirá nossos N prompts em 2 classes
+  - Identificaremos qual é a classe referente ao sucesso, que tem maioria 1 e filtramos nosso cluster embeddings mantendo apenas os que pertencem a classe elite
+  - Rodaremos a PIPELINE do PCA original apenas no novo cluster de elite
+- Testar com simulated annealing usando o custo uma função de perplexidade
+- Testar com SGD também usando uma função de perplexidade
+- Testar pertubações no alpha
+  - Se melhora ou piora os resultados
+- Testar mudanças no K (tamanho da bag of words)
+  - Se melhora ou piora os resultados 
 
 
 
