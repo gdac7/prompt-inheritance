@@ -8,7 +8,7 @@ class LocalModelTransformers():
             self.model_name, 
             padding_side="left"
         )
-        self.model = AutoModelForCausalLM(
+        self.model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             device_map=device,
             torch_dtype=torch.bfloat16,
