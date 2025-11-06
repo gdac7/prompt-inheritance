@@ -33,3 +33,22 @@
   
 ### Resultado
 - Um prompt novo, coerente e semanticamente relacionado ao cluster original, mas que explora uma variação específica que controlamos com alpha
+
+### Próximos passos
+- Testar com ICA
+  - Irá encontrar componentes independentes
+- Testar com LCA + PCA
+- Testar com filtro de perplexidade
+
+
+
+
+
+### Resultados para colher
+- Verificar se o score do novo prompt está próximo da média de score dos prompts base -> gráfico
+- Verificar se, se nos basearmos em prompts que eram jailbreak, o novo prompt ainda é jailbreak
+- Verificar nova taxa de jailbreak para comparar com a taxa base do ADT
+- Pertubação no alpha testando por um filtro de perplexidade
+- Alteração em score e jailbreak de acordo com pertubações no alpha e no k do top_k_scores
+- SGD usando função de custo a perplexidade
+- Simulated Annealing com custo de perplexidade
