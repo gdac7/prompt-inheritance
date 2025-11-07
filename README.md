@@ -44,6 +44,9 @@
   - Identificaremos qual é a classe referente ao sucesso, que tem maioria 1 e filtramos nosso cluster embeddings mantendo apenas os que pertencem a classe elite
   - Rodaremos a PIPELINE do PCA original apenas no novo cluster de elite
 - Testar com simulated annealing usando o custo uma função de perplexidade
+  - Partindo de prompts com um score bom, se deixarmos mais legivel melhora? E se deixarmos menos legivel?
+    - Basicamente, se andarmos no eixo da perplexidade o que acontece no eixo de Attack Sucess Rate?
+  - Pegaremos o prompt que o LCA + PCA gerou e usaremos SA para maximizar a perplexidade
 - Testar com SGD também usando uma função de perplexidade
 - Testar pertubações no alpha
   - Se melhora ou piora os resultados
