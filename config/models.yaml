@@ -2,3 +2,4 @@ models:
   sanitizer: "meta-llama/Llama-3.1-8B-Instruct"
   perplexed: "meta-llama/Llama-3.1-8B"
   embedding: "all-MiniLM-L6-v2"
+  mask-model: "bert-base-multilingual-cased"
