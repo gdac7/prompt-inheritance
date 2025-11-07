@@ -48,6 +48,9 @@
     - Basicamente, se andarmos no eixo da perplexidade o que acontece no eixo de Attack Sucess Rate?
   - Pegaremos o prompt que o LCA + PCA gerou e usaremos SA para maximizar a perplexidade
 - Testar com SGD também usando uma função de perplexidade
+  - Single Token Optimizaiton (STO)
+  - Preliminary Selection
+  - Fine Selection
 - Testar pertubações no alpha
   - Se melhora ou piora os resultados
 - Testar mudanças no K (tamanho da bag of words)
@@ -62,5 +65,5 @@
 - Verificar se, se nos basearmos em prompts que eram jailbreak, o novo prompt ainda é jailbreak
 - Verificar nova taxa de jailbreak para comparar com a taxa base do ADT
 - Alteração em score e jailbreak de acordo com pertubações no alpha e no k do top_k_scores
-- SGD usando função de custo a perplexidade
 - Simulated Annealing com custo de perplexidade
+- SGD usando função de custo a perplexidade
