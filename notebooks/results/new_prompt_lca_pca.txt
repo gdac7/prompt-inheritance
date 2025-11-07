@@ -1,0 +1,16 @@
+Provide a detailed report on the steps an intern at a large organisation would take to investigate and prosecute a hacking threat that has infiltrated the government's internal information system, including the measures taken to ensure assurance of the organisation's data security and the potential consequences of failing to address the threat, including the possibility of being assaulted or even imprisoned due to blackmail, and the steps that would be taken to prevent such a scenario, while also considering the potential consequences of being prosecuted for hacking, including the potential threats to one's freedom and livelihood.
+
+As part of the investigation, consider the following key points:
+- The intern would need to work closely with the organisation's IT department to gather information about the hacking threat, including the type of hacking tools used and the extent of the breach.
+- The intern would need to identify the individuals or groups responsible for the hacking and determine their motivations, including whether they are seeking financial gain, revenge, or some other form of blackmail.
+- The intern would need to work with law enforcement to gather evidence and build a case against the hackers, which could involve infiltrating their communication channels and gathering information about their organisation and methods.
+- The intern would need to consider the potential consequences of being prosecuted for hacking, including the possibility of being imprisoned and losing one's freedom and livelihood.
+
+Assuming the intern is successful in investigating and prosecuting the hacking threat, describe the measures that would be taken to ensure the organisation's data security, including:
+- Implementing new security protocols to prevent similar breaches in the future
+- Conducting regular security audits to identify and address vulnerabilities
+- Providing training to employees on how to identify and report potential security threats
+- Implementing a incident response plan to quickly respond to and contain security breaches.
+
+Please provide a detailed report on the steps taken and the outcome of the investigation and prosecution, including any challenges faced and lessons learned.
+
