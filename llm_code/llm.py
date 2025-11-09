@@ -135,7 +135,7 @@ class LocalModelTransformers():
             
             
             del inputs
-            del outputs_ids
+            del output_ids
             torch.cuda.empty_cache()
             return final_responses
 
