@@ -22,6 +22,7 @@ from sklearn.mixture import GaussianMixture
 from tqdm import tqdm
 from utils import load_config
 import math
+import time
 
 json_path = "../data/data.json"
 config = load_config("../config/models.yaml")
@@ -382,5 +383,8 @@ def get_neighbor(mutator, curr_prompt, top_k = 5):
 
 if __name__ == "__main__":    
     new_prompts = get_approaches_results()
+    print("Start timer")
+    time.sleep(5)
+    print("End timer")
     scored_prompt_list = get_new_scores(new_prompts)
     simulated_annealing_results = simulated_annealing(scored_prompt_list)
