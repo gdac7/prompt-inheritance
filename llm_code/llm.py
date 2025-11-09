@@ -120,7 +120,7 @@ class LocalModelTransformers():
                 truncation=True,
                 max_length=4096
             )
-            inputs = {k: v.to(self.model.device) for k, v in input.items()}
+            inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
             output_ids = self.model.generate(**inputs, **generation_params)
             input_length = inputs['inputs'].shape[1]
             final_responses = []
