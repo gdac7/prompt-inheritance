@@ -7,6 +7,7 @@ from src.core.attack_generator import AttackGenerator as ag
 from llm_code.prompt_manager import SanitizerPrompt
 from utils import calc_perplexity
 import json
+import gc
 import random
 from typing import Dict, List
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -230,7 +231,6 @@ def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result, lca_pc
 def get_approaches_results(output_dir="results/get_approaches_results.json"):
     data = load_data()
     sanitizer = LocalModelTransformers(sanitizer_model_name)
-   
     requests = list(set([item["malicious_request"] for item in data]))[:30]
     requests_embeddings = np.array(model.encode(requests, show_progress_bar=False))
     n = 10
@@ -262,6 +262,11 @@ def get_approaches_results(output_dir="results/get_approaches_results.json"):
 
     with open(output_dir, "w", encoding="utf-8") as f:
         json.dump(all_new_prompts, f, ensure_ascii=False, indent=4)
+
+    del sanitizer
+    gc.collect()
+    torch.cuda.empty_cache()
+
     return all_new_prompts
 
 def get_new_scores(new_prompts, output_dir="results/get_new_scores_results.json"):
@@ -383,8 +388,5 @@ def get_neighbor(mutator, curr_prompt, top_k = 5):
 
 if __name__ == "__main__":    
     new_prompts = get_approaches_results()
-    print("Start timer")
-    time.sleep(5)
-    print("End timer")
     scored_prompt_list = get_new_scores(new_prompts)
     simulated_annealing_results = simulated_annealing(scored_prompt_list)
