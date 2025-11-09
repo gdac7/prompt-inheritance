@@ -64,6 +64,6 @@
 - Verificar se o score do novo prompt está próximo da média de score dos prompts base -> gráfico
 - Verificar se, se nos basearmos em prompts que eram jailbreak, o novo prompt ainda é jailbreak
 - Verificar nova taxa de jailbreak para comparar com a taxa base do ADT
-- Alteração em score e jailbreak de acordo com pertubações no alpha e no k do top_k_scores
+<!-- - Alteração em score e jailbreak de acordo com pertubações no alpha e no k do top_k_scores -->
 - Simulated Annealing com custo de perplexidade
 - SGD usando função de custo a perplexidade

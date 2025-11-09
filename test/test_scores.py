@@ -148,9 +148,9 @@ def apply_lca_pca(data, top_n, cluster_embeddings, sucess_threshold=8.5, n_compo
 
     elite_centered_embeddings, centroid = get_centroid(elite_cluster_embeddings)
     baw_lca_pca = apply_pca(elite_centered_embeddings, centroid)
-    return baw_lca_pca
+    return baw_lca_pca, elite_mask
 
-def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result, lca_pca_result, base_prompts, base_scores, num_prompts=5) -> Dict[str, Dict[str, any]]:
+def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result, lca_pca_result, base_prompts, base_scores, base_prompts_lca, base_scores_lca, num_prompts=5) -> Dict[str, Dict[str, any]]:
     # Chamar o LLM para gerar 5 samples com cada bag of words dos métodos
     # Nos argumentos
     # Teremos no final um dicionario com {pca: prompts: List[5 items], scores: List[float], mean_score: float, o mesmo para o resto}
@@ -179,7 +179,7 @@ def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result, lca_pc
     )
 
     base_mean_score = np.mean(base_scores)
-
+    base_mean_score_lca = np.mean(base_scores_lca)
     results_dict = {
         "pca": {
             "malicious_request": malicious_request,
@@ -213,9 +213,9 @@ def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result, lca_pc
             "best_prompt": "",
             "worst_prompt": "",
             "mean_score": 0.0,
-            "base_prompts": base_prompts,
-            "base_scores": base_scores,
-            "base_mean_score": base_mean_score,
+            "base_prompts": base_prompts_lca,
+            "base_scores": base_scores_lca,
+            "base_mean_score": base_mean_score_lca,
         }
     }
     return results_dict
@@ -253,7 +253,11 @@ def get_approaches_results(output_dir="results/get_approaches_results.json"):
         centered_embeddings, centroid = get_centroid(cluster_embeddings)
         baw_pca = apply_pca(centered_embeddings, centroid)
         baw_ica = apply_ica(centered_embeddings, centroid, n_components=5)
-        baw_lca_pca = apply_lca_pca(data, top_n, cluster_embeddings)
+        baw_lca_pca, elite_mask = apply_lca_pca(data, top_n, cluster_embeddings)
+        base_prompts_np = np.array(base_prompts)
+        base_scores_np = np.array(base_scores)
+        base_prompts_lca = base_prompts_np[elite_mask].tolist()
+        base_scores_lca = base_scores_np[elite_mask].tolist()
         new_prompts = get_new_prompts(
             sanitizer=sanitizer,
             malicious_request=request,
@@ -261,7 +265,9 @@ def get_approaches_results(output_dir="results/get_approaches_results.json"):
             ica_result=baw_ica, 
             lca_pca_result=baw_lca_pca,
             base_prompts=base_prompts,
-            base_scores=base_scores
+            base_scores=base_scores,
+            base_prompts_lca=base_prompts_lca,
+            base_scores_lca=base_scores_lca,
         )
         all_new_prompts.append(new_prompts)
 
@@ -435,9 +441,7 @@ def get_simulated_annealing_scores(prompts_list, output_dir="results/simmulated_
 
 if __name__ == "__main__":    
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
-    #new_prompts = get_approaches_results()
-    with open("results/get_approaches_results.json", "r") as f:
-        new_prompts = json.load(f)
+    new_prompts = get_approaches_results()
     scored_prompt_list = get_new_scores(new_prompts)
     simulated_annealing_results = simulated_annealing(scored_prompt_list)
     simulated_annealing_results_with_score = get_simulated_annealing_scores(simulated_annealing_results)
