@@ -384,9 +384,7 @@ def get_neighbor(mutator, curr_prompt, top_k = 5):
             
 
 
-def run_get_approaches_results(output_queue):
-    results = get_approaches_results()
-    output_queue.put(results)
+
     
         
 
@@ -394,12 +392,6 @@ def run_get_approaches_results(output_queue):
     
 
 if __name__ == "__main__":    
-    ctx = mp.get_context("spawn")
-    output_queue = ctx.Queue()
-    process = ctx.Process(target=run_get_approaches_results, args=(output_queue,))
-    process.start()
-    process.join()
-    approaches_results = output_queue.get()
-    new_prompts = approaches_results
+    new_prompts = get_approaches_results()
     scored_prompt_list = get_new_scores(new_prompts)
     simulated_annealing_results = simulated_annealing(scored_prompt_list)
