@@ -24,6 +24,8 @@ from tqdm import tqdm
 from utils import load_config
 import math
 import time
+import multiprocessing as mp
+
 
 json_path = "../data/data.json"
 config = load_config("../config/models.yaml")
@@ -380,6 +382,11 @@ def get_neighbor(mutator, curr_prompt, top_k = 5):
     new_prompt = " ".join(tokens)
     return new_prompt
             
+
+
+def run_get_approaches_results(output_queue):
+    results = get_approaches_results()
+    output_queue.put(results)
     
         
 
@@ -387,6 +394,12 @@ def get_neighbor(mutator, curr_prompt, top_k = 5):
     
 
 if __name__ == "__main__":    
-    new_prompts = get_approaches_results()
+    ctx = mp.get_context("spawn")
+    output_queue = ctx.Queue()
+    process = ctx.Process(target=run_get_approaches_results, args=(output_queue,))
+    process.start()
+    process.join()
+    approaches_results = output_queue.get()
+    new_prompts = approaches_results
     scored_prompt_list = get_new_scores(new_prompts)
     simulated_annealing_results = simulated_annealing(scored_prompt_list)
