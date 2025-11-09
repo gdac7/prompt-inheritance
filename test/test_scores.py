@@ -90,7 +90,7 @@ def apply_pca(centered_embeddings, centroid, k=15):
             bow.append(token)
     return bow
 
-def apply_ica(centered_embeddings, centroid, n_components=5, max_iter=500, tol=1e-3, random_state=42, component_index_to_use=0, k=15):
+def apply_ica(centered_embeddings, centroid, n_components=5, max_iter=1000, tol=1e-3, random_state=42, component_index_to_use=0, k=15):
     ica = FastICA(
         n_components=n_components,
         max_iter=max_iter,
@@ -284,7 +284,7 @@ def get_new_scores(new_prompts, output_dir="results/get_new_scores_results.json"
             target_responses = target.batch_generate(user_prompts=prompts)  
             scores = []
             for prompt, response in zip(prompts, target_responses):
-                score = attack_generator._score_response(results["malicious_request"], prompt, response)
+                score, _ = attack_generator._score_response(results["malicious_request"], prompt, response)
                 if score < worst_score:
                     worst_score = score
                     worst_prompt = prompt
