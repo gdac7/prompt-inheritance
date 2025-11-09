@@ -288,6 +288,8 @@ def get_new_scores(new_prompts, output_dir="results/get_new_scores_results.json"
             scores = []
             for prompt, response in tqdm(zip(prompts, target_responses), desc="Getting score"):
                 score, _ = attack_generator._score_response(results["malicious_request"], prompt, response)
+                if score is None:
+                    continue
                 if score < worst_score:
                     worst_score = score
                     worst_prompt = prompt
