@@ -129,18 +129,23 @@ def apply_lca_pca(data, top_n, cluster_embeddings, sucess_threshold=8.5, n_compo
     
     lca_features = np.array(features_list)
     aligned_embeddings = cluster_embeddings
+
     gmm = GaussianMixture(n_components=n_components, random_state=random_state)
     gmm.fit(aligned_embeddings)
     prompt_classes = gmm.predict(aligned_embeddings)
     success_labels = lca_features.flatten()
-    success_rate_class_0 = np.mean(success_labels[prompt_classes == 0])
-    success_rate_class_1 = np.mean(success_labels[prompt_classes == 1])
+    success_rate_class_0 = np.mean(success_labels[prompt_classes == 0]) if (prompt_classes == 0).any() else 0.0
+    success_rate_class_1 = np.mean(success_labels[prompt_classes == 1]) if (prompt_classes == 1).any() else 0.0
     if success_rate_class_1 >= success_rate_class_0:
         elite_class_label = 1
     else:
         elite_class_label = 0
     elite_mask = (prompt_classes == elite_class_label)
     elite_cluster_embeddings = aligned_embeddings[elite_mask]
+    if elite_cluster_embeddings.shape[0] == 0:
+        ### elite cluster is empty fall back to using the original (non-elite) cluster
+        elite_cluster_embeddings = aligned_embeddings
+        
     elite_centered_embeddings, centroid = get_centroid(elite_cluster_embeddings)
     baw_lca_pca = apply_pca(elite_centered_embeddings, centroid)
     return baw_lca_pca
