@@ -39,13 +39,11 @@ def load_data():
     return data
 
 def get_base_prompts_and_scores(sim_prompts, data):
-    sim_prompts_set = set(sim_prompts)
-    base_prompts = [item["attack_prompt"] for item in data if item["attack_prompt"] in sim_prompts_set]
-    base_scores = [float(item["score"]) for item in data if item["attack_prompt"] in sim_prompts_set]
-    return base_prompts, base_scores
+    base_scores = [float(item["score"]) for item in data if item["attack_prompt"] in sim_prompts]
+    return sim_prompts, base_scores
 
 
-def find_n_similar(request, requests_embeddings, n, all_requests, data):
+def find_n_similar(request, requests_embeddings, n, all_requests, data, top_m=20):
     query_embedding = model.encode(request).reshape(1, -1)
     cos_sim = cosine_similarity(query_embedding, requests_embeddings)
     top_n = np.argsort(cos_sim[0])[-n:][::-1]
@@ -56,7 +54,7 @@ def find_n_similar(request, requests_embeddings, n, all_requests, data):
     sim_prompts = []
     original_data_idx = []
     for original_idx, item in enumerate(data):
-        if item["malicious_request"] in sim_requests_set:
+        if item["malicious_request"] in sim_requests_set and len(sim_prompts) < top_m:
             sim_prompts.append(item["attack_prompt"])
             original_data_idx.append(original_idx)
     cluster_embeddings = np.array(model.encode(sim_prompts, show_progress_bar=False))
@@ -300,6 +298,10 @@ def get_new_scores(new_prompts, output_dir="results/get_new_scores_results.json"
 
     with open(output_dir, "w", encoding="utf-8") as f:
         json.dump(new_prompts, f, ensure_ascii=False, indent=4)
+    del target
+    gc.collect()
+    torch.cuda.empty_cache()
+
     return new_prompts
 
 
@@ -316,7 +318,9 @@ def simulated_annealing(prompts_list, iterations=1000, initial_temp=1.0, cooling
     mutator = pipeline(
         "fill-mask",
         model=mask_model,
-        device="cuda"
+        device="cuda",
+        truncation=True,
+        max_length=512
     )
     ppl_model.eval()
     os.makedirs(os.path.dirname(output_dir), exist_ok=True)
@@ -355,7 +359,7 @@ def simulated_annealing(prompts_list, iterations=1000, initial_temp=1.0, cooling
                 if i % 100 == 0:
                     print(f"iteration {i}/{iterations}: Temp={T:.4f}, Curr Cost={curr_cost:.4f}, Best={best_cost:.4f}")
             results["simulated_annealing_prompt"] = best_prompt
-            results["simulated_annealing_cost"] = best_cost
+            results["simulated_annealing_ppl_cost"] = best_cost
 
     with open(output_dir, "w", encoding="utf-8") as f:
         json.dump(prompts_list, f, ensure_ascii=False, indent=4)
@@ -381,6 +385,26 @@ def get_neighbor(mutator, curr_prompt, top_k = 5):
     tokens[idx_to_mask] = new_token
     new_prompt = " ".join(tokens)
     return new_prompt
+
+
+def get_simulated_annealing_scores(prompts_list):
+    scorer = RemoteModelAPI("http://localhost:8001/generate_score")
+    target = LocalModelTransformers("meta-llama/Llama-3.1-8B-Instruct")
+    attack_generator = ag(None, None, scorer, None)
+    for request in tqdm(prompts_list, desc="Scoring simulated annealing"):
+        for method, results in request.items():
+            prompt = results["simulated_annealing_prompt"]
+            target_response = target.generate(user_prompt=prompt)
+            score, _ = attack_generator._score_response(results["malicious_request"], prompt, target_response)
+            results["simulated_annealing_prompt_score"] = score
+            results["simulated_annealing_target_response"] = target_response
+    del target
+    gc.collect()
+    torch.cuda.empyt_cache()
+
+    return prompts_list
+
+
             
 
 
@@ -395,3 +419,4 @@ if __name__ == "__main__":
     new_prompts = get_approaches_results()
     scored_prompt_list = get_new_scores(new_prompts)
     simulated_annealing_results = simulated_annealing(scored_prompt_list)
+    simulated_annealing_results_with_score = get_simulated_annealing_scores(simulated_annealing_results)
