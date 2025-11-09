@@ -1,10 +1,10 @@
 import sys
 import os
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "../../autodan-itau")))
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..")))
-sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "../autodan-itau")))
 from src.api_models.remote_model import RemoteModelAPI
 from src.core.attack_generator import AttackGenerator as ag
-from prompt_manager import SanitizerPrompt
+from llm_code.prompt_manager import SanitizerPrompt
 from utils import calc_perplexity
 import json
 import random
@@ -12,7 +12,7 @@ from typing import Dict, List
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers import pipeline, set_seed
 import torch
-from llm import LocalModelTransformers
+from llm_code.llm import LocalModelTransformers
 from sentence_transformers import SentenceTransformer
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
@@ -230,7 +230,7 @@ def get_approaches_results(output_dir="results/get_approaches_results.json"):
     data = load_data()
     sanitizer = LocalModelTransformers(sanitizer_model_name)
    
-    requests = list(set([item["malicious_request"] for item in data]))[:50]
+    requests = list(set([item["malicious_request"] for item in data]))[:30]
     requests_embeddings = np.array(model.encode(requests, show_progress_bar=False))
     n = 10
     os.makedirs(os.path.dirname(output_dir), exist_ok=True)
