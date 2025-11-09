@@ -233,7 +233,7 @@ def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result, lca_pc
 def get_approaches_results(output_dir="results/get_approaches_results.json"):
     data = load_data()
     sanitizer = LocalModelTransformers(sanitizer_model_name)
-    requests = list(set([item["malicious_request"] for item in data]))[:30]
+    requests = list(set([item["malicious_request"] for item in data]))[:3]
     requests_embeddings = np.array(model.encode(requests, show_progress_bar=False))
     n = 10
     os.makedirs(os.path.dirname(output_dir), exist_ok=True)
@@ -283,7 +283,7 @@ def get_new_scores(new_prompts, output_dir="results/get_new_scores_results.json"
             prompts = results["prompts"]   
             target_responses = target.batch_generate(user_prompts=prompts)  
             scores = []
-            for prompt, response in zip(prompts, target_responses):
+            for prompt, response in tqdm(zip(prompts, target_responses), desc="Getting score"):
                 score, _ = attack_generator._score_response(results["malicious_request"], prompt, response)
                 if score < worst_score:
                     worst_score = score
