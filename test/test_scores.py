@@ -361,7 +361,11 @@ def simulated_annealing(prompts_list, iterations=1000, initial_temp=1.0, cooling
 
     with open(output_dir, "w", encoding="utf-8") as f:
         json.dump(prompts_list, f, ensure_ascii=False, indent=4)
-            
+    del ppl_tokenizer
+    del ppl_model
+    del mutator
+    gc.collect()
+    torch.cuda.empty_cache()
     return prompts_list
 
 def get_neighbor(mutator, curr_prompt, top_k = 5):
