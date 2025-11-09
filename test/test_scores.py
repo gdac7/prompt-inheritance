@@ -145,7 +145,7 @@ def apply_lca_pca(data, top_n, cluster_embeddings, sucess_threshold=8.5, n_compo
     if elite_cluster_embeddings.shape[0] == 0:
         ### elite cluster is empty fall back to using the original (non-elite) cluster
         elite_cluster_embeddings = aligned_embeddings
-        
+
     elite_centered_embeddings, centroid = get_centroid(elite_cluster_embeddings)
     baw_lca_pca = apply_pca(elite_centered_embeddings, centroid)
     return baw_lca_pca
@@ -236,7 +236,7 @@ def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result, lca_pc
 def get_approaches_results(output_dir="results/get_approaches_results.json"):
     data = load_data()
     sanitizer = LocalModelTransformers(sanitizer_model_name)
-    requests = list(set([item["malicious_request"] for item in data]))[:3]
+    requests = list(set([item["malicious_request"] for item in data]))[:30]
     requests_embeddings = np.array(model.encode(requests, show_progress_bar=False))
     n = 10
     os.makedirs(os.path.dirname(output_dir), exist_ok=True)
