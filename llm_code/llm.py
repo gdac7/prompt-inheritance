@@ -75,6 +75,9 @@ class LocalModelTransformers():
         generated_tokens = output_ids[0][input_length:]
         final_response = self.tokenizer.decode(generated_tokens, skip_special_tokens=True).strip()
         final_response = self.wrapper(final_response)
+        del inputs
+        del output_ids
+        torch.cuda.empty_cache()
         return final_response
 
     def batch_generate(self, user_prompts: List[str], system_prompt: str=None, max_tokens: int=4096, temperature: float=0.7, condition: Optional[str] = None):
@@ -130,6 +133,10 @@ class LocalModelTransformers():
                 final_response = self.wrapper(final_response)
                 final_responses.append(final_response)
             
+            
+            del inputs
+            del outputs_ids
+            torch.cuda.empty_cache()
             return final_responses
 
     
