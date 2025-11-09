@@ -319,8 +319,6 @@ def simulated_annealing(prompts_list, iterations=1000, initial_temp=1.0, cooling
         "fill-mask",
         model=mask_model,
         device="cuda",
-        truncation=True,
-        max_length=512
     )
     ppl_model.eval()
     os.makedirs(os.path.dirname(output_dir), exist_ok=True)
@@ -374,6 +372,14 @@ def get_neighbor(mutator, curr_prompt, top_k = 5):
     original_token = tokens[idx_to_mask]
     tokens[idx_to_mask] = mutator.tokenizer.mask_token
     masked_prompt = " ".join(tokens)
+    if len(masked_prompt) > 512:
+        if "[MASK]" in masked_prompt:
+            mask_index = masked_prompt.index("[MASK]")
+            start = max(0, mask_index - 250)
+            end = min(len(masked_prompt), mask_index + 250)
+            masked_prompt = masked_prompt[start:end]
+        else:
+            masked_prompt = masked_prompt[:512]
     disturbances = mutator(masked_prompt, top_k=top_k)
     valid_dists = [
         s['token_str'] for s in disturbances
@@ -418,7 +424,10 @@ def get_simulated_annealing_scores(prompts_list, output_dir="results/simmulated_
 
 if __name__ == "__main__":    
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
-    new_prompts = get_approaches_results()
-    scored_prompt_list = get_new_scores(new_prompts)
-    simulated_annealing_results = simulated_annealing(scored_prompt_list)
+    #new_prompts = get_approaches_results()
+    #scored_prompt_list = get_new_scores(new_prompts)
+    with open("results/get_new_scores_results.json", "r") as f:
+        data = json.load(f)
+    
+    simulated_annealing_results = simulated_annealing(data)
     simulated_annealing_results_with_score = get_simulated_annealing_scores(simulated_annealing_results)
