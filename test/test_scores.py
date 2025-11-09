@@ -387,7 +387,7 @@ def get_neighbor(mutator, curr_prompt, top_k = 5):
     return new_prompt
 
 
-def get_simulated_annealing_scores(prompts_list):
+def get_simulated_annealing_scores(prompts_list, output_dir="results/simmulated_annealing_results_with_score.json"):
     scorer = RemoteModelAPI("http://localhost:8001/generate_score")
     target = LocalModelTransformers("meta-llama/Llama-3.1-8B-Instruct")
     attack_generator = ag(None, None, scorer, None)
@@ -401,7 +401,8 @@ def get_simulated_annealing_scores(prompts_list):
     del target
     gc.collect()
     torch.cuda.empty_cache()
-
+    with open(output_dir, "w", encoding="utf-8") as f:
+        json.dump(prompts_list, f, ensure_ascii=False, indent=4)
     return prompts_list
 
 
