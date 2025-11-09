@@ -122,7 +122,7 @@ class LocalModelTransformers():
             )
             inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
             output_ids = self.model.generate(**inputs, **generation_params)
-            input_length = inputs['inputs'].shape[1]
+            input_length = inputs['input_ids'].shape[1]
             final_responses = []
             for i in range(len(output_ids)):
                 generated_tokens = output_ids[i][input_length:]
