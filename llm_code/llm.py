@@ -128,7 +128,7 @@ class LocalModelTransformers():
                 generated_tokens = output_ids[i][input_length:]
                 final_response = self.tokenizer.decode(generated_tokens, skip_special_tokens=True).strip()
                 final_response = self.wrapper(final_response)
-                final_response.append(final_response)
+                final_responses.append(final_response)
             
             return final_responses
 
