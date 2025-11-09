@@ -428,12 +428,7 @@ def get_simulated_annealing_scores(prompts_list, output_dir="results/simmulated_
 
 if __name__ == "__main__":    
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
-    #new_prompts = get_approaches_results()
-    #scored_prompt_list = get_new_scores(new_prompts)
-    #with open("results/get_new_scores_results.json", "r") as f:
-        #data = json.load(f)
-    
-    #simulated_annealing_results = simulated_annealing(data)
-    with open("results/simmulated_annealing_results.json", "r") as f:
-        data = json.load(f)
-    simulated_annealing_results_with_score = get_simulated_annealing_scores(data)
+    new_prompts = get_approaches_results()
+    scored_prompt_list = get_new_scores(new_prompts)
+    simulated_annealing_results = simulated_annealing(scored_prompt_list)
+    simulated_annealing_results_with_score = get_simulated_annealing_scores(simulated_annealing_results)
