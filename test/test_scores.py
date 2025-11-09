@@ -400,7 +400,7 @@ def get_simulated_annealing_scores(prompts_list):
             results["simulated_annealing_target_response"] = target_response
     del target
     gc.collect()
-    torch.cuda.empyt_cache()
+    torch.cuda.empty_cache()
 
     return prompts_list
 
@@ -416,6 +416,7 @@ def get_simulated_annealing_scores(prompts_list):
     
 
 if __name__ == "__main__":    
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
     new_prompts = get_approaches_results()
     scored_prompt_list = get_new_scores(new_prompts)
     simulated_annealing_results = simulated_annealing(scored_prompt_list)
