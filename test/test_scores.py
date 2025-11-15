@@ -27,7 +27,7 @@ import time
 import multiprocessing as mp
 
 
-json_path = "../data/data.json"
+json_path = "../data/jailbreak_data.json"
 config = load_config("../config/models.yaml")
 
 model = SentenceTransformer(config["models"]["embedding"])
@@ -443,5 +443,5 @@ if __name__ == "__main__":
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     new_prompts = get_approaches_results()
     scored_prompt_list = get_new_scores(new_prompts)
-    simulated_annealing_results = simulated_annealing(scored_prompt_list)
-    simulated_annealing_results_with_score = get_simulated_annealing_scores(simulated_annealing_results)
+    #simulated_annealing_results = simulated_annealing(scored_prompt_list)
+    #simulated_annealing_results_with_score = get_simulated_annealing_scores(simulated_annealing_results)
