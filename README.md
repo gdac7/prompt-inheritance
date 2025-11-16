@@ -3,7 +3,7 @@
 - 1: Gerar um conjunto de N prompts semelhantes baseado na entrada de um usuário
 - 2: Calcular o embedding de cada prompt inteirou usando um modelo (ex: SentenceTransformer)
 - 3: Calcular o vetor médio (centroide) desses embeddings $C = \frac{1}{N}\sum_{i=1}^{n}E_{i}$
-- 4: Análise de Componentes Principais (PCA) ou 
+- 4: Análise de Componentes Principais (PCA) ou ICA ou LCA + PCA
 - 5: Transformar o novo vetor (centroide mofificado) de volta em tokens
 - 6: Sanitização: Pedir a um LLM para "fazer sentido"
 
