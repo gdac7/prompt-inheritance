@@ -27,7 +27,7 @@ import time
 import multiprocessing as mp
 
 
-json_path = "../data/jailbreak_data.json"
+json_path = "../data/data.json"
 config = load_config("../config/models.yaml")
 
 model = SentenceTransformer(config["models"]["embedding"])
