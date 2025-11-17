@@ -65,7 +65,7 @@ def get_centroid(cluster_embeddings):
     centered_embeddings = cluster_embeddings - centroid
     return centered_embeddings, centroid
 
-def apply_pca(centered_embeddings, centroid, k=15):
+def apply_pca(centered_embeddings, centroid, k=50):
     pca = PCA(n_components=1)
     pca.fit(centered_embeddings)
     v1 = pca.components_[0]
@@ -88,7 +88,7 @@ def apply_pca(centered_embeddings, centroid, k=15):
             bow.append(token)
     return bow
 
-def apply_ica(centered_embeddings, centroid, n_components=5, max_iter=1000, tol=1e-3, random_state=42, component_index_to_use=0, k=15):
+def apply_ica(centered_embeddings, centroid, n_components=5, max_iter=1000, tol=1e-3, random_state=42, component_index_to_use=0, k=50):
     ica = FastICA(
         n_components=n_components,
         max_iter=max_iter,
@@ -144,6 +144,9 @@ def apply_lca_pca(data, top_n, cluster_embeddings, sucess_threshold=8.5, n_compo
     elite_cluster_embeddings = aligned_embeddings[elite_mask]
     if elite_cluster_embeddings.shape[0] == 0:
         ### elite cluster is empty fall back to using the original (non-elite) cluster
+        elite_cluster_embeddings = aligned_embeddings
+    
+    if elite_cluster_embeddings.shape[0] < 2:
         elite_cluster_embeddings = aligned_embeddings
 
     elite_centered_embeddings, centroid = get_centroid(elite_cluster_embeddings)
@@ -236,7 +239,9 @@ def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result, lca_pc
 def get_approaches_results(output_dir="results-jailbreak-set/get_approaches_results.json"):
     data = load_data()
     sanitizer = LocalModelTransformers(sanitizer_model_name)
-    requests = list(set([item["malicious_request"] for item in data]))[:30]
+    all_requests_ordered = [item["malicious_request"] for item in data]
+    unique_requests_ordered = list(dict.fromkeys(all_requests_ordered))
+    requests = unique_requests_ordered[:30]
     requests_embeddings = np.array(model.encode(requests, show_progress_bar=False))
     n = 10
     os.makedirs(os.path.dirname(output_dir), exist_ok=True)
