@@ -65,6 +65,63 @@ def get_centroid(cluster_embeddings):
     centered_embeddings = cluster_embeddings - centroid
     return centered_embeddings, centroid
 
+def score_weighted_pca(cluster_embeddings, scores, min_score_threshold= 0.0, k=50):
+    if cluster_embeddings.shape[0] != len(scores):
+        raise RuntimeError("shape do cluster diferente da quantidade de scores fornecida")
+    
+    cluster_embeddings  = cluster_embeddings.astype(np.float64)
+    scores = scores.astype(np.float64)  
+    mask = scores >= min_score_threshold
+    filtered_embeddings = cluster_embeddings[mask]
+    filtered_scores = scores[mask]
+    if len(filtered_scores) < 2:
+        filtered_embeddings = cluster_embeddings
+        filtered_scores = scores
+    n_prompts = len(filtered_scores)
+    embedding_dim = filtered_embeddings.shape[1]
+    score_min = filtered_scores.min()
+    score_max = filtered_scores.max()
+    score_range = score_max - score_min
+    if score_range == 0.0:
+       weights = np.ones(n_prompts) / n_prompts
+    else:
+        weights = (filtered_scores - score_min) / score_range
+        weights = weights / weights.sum() # sum = 1
+    
+    weighted_centroid = np.sum(
+        weights[:, np.newaxis] * filtered_embeddings,
+        axis=0
+    )
+
+    centered_embeddings = filtered_embeddings - weighted_centroid
+    W = np.diag(weights)
+    weighted_cov = (centered_embeddings.T @ W @ centered_embeddings) / weights.sum()
+    weighted_cov = (weighted_cov + weighted_cov.T) / 2
+    eigenvalues, eigenvectors = np.linalg.eigh(weighted_cov)
+    sorted_indices = np.argsort(eigenvalues)[::-1]
+    eigenvalues = eigenvalues[sorted_indices]
+    eigenvectors = eigenvectors[:, sorted_indices]
+    v1 = eigenvectors[:, 0]
+    lambda1 = eigenvalues[0]
+    
+
+    alpha = np.sqrt(lambda1)
+    c_new  = weighted_centroid + alpha * v1
+    transformer_model = model[0]
+    tokenizer = transformer_model.tokenizer
+    word_embedding_matrix = transformer_model.auto_model.get_input_embeddings().weight.detach().cpu().numpy()
+    c_new = c_new.reshape(1, -1)
+    all_cos_sim = cosine_similarity(c_new, word_embedding_matrix)
+    top_k_index = np.argsort(all_cos_sim[0])[-k:][::-1]
+    top_k_tokens = tokenizer.convert_ids_to_tokens(top_k_index)
+    top_k_scores = all_cos_sim[0][top_k_index]
+    bow = []
+    special_tokens = tokenizer.all_special_tokens
+    for token, score in zip(top_k_tokens, top_k_scores):
+        if token not in special_tokens and not token.startswith("##") and len(token) > 1:
+            bow.append(token)
+    return bow
+
 def apply_pca(centered_embeddings, centroid, k=50):
     pca = PCA(n_components=1)
     pca.fit(centered_embeddings)
@@ -153,14 +210,14 @@ def apply_lca_pca(data, top_n, cluster_embeddings, sucess_threshold=8.5, n_compo
     baw_lca_pca = apply_pca(elite_centered_embeddings, centroid)
     return baw_lca_pca, elite_mask
 
-def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result, lca_pca_result, base_prompts, base_scores, base_prompts_lca, base_scores_lca, num_prompts=5) -> Dict[str, Dict[str, any]]:
+def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result, lca_pca_result, base_prompts, base_scores, base_prompts_lca, base_scores_lca, score_weighted_pca_result, num_prompts=5) -> Dict[str, Dict[str, any]]:
     # Chamar o LLM para gerar 5 samples com cada bag of words dos métodos
     # Nos argumentos
     # Teremos no final um dicionario com {pca: prompts: List[5 items], scores: List[float], mean_score: float, o mesmo para o resto}
     bow_map = {
         "pca": pca_result,
         "ica": ica_result,
-        "lca_pca": lca_pca_result
+        "score_weighted_pca": score_weighted_pca_result,
     }
 
     base_templates = {}
@@ -208,33 +265,23 @@ def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result, lca_pc
             "base_scores": base_scores,
             "base_mean_score": base_mean_score,
         },
-        "lca_pca": {
+        "score_weighted_pca": {
             "malicious_request": malicious_request,
-            "prompts": all_generated_prompts[num_prompts*2:],
+            "prompts": all_generated_prompts[num_prompts*3:],
             "target_responses": [],
             "scores": [],
             "best_prompt": "",
             "worst_prompt": "",
             "mean_score": 0.0,
-            "base_prompts": base_prompts_lca,
-            "base_scores": base_scores_lca,
-            "base_mean_score": base_mean_score_lca,
+            "base_prompts": base_prompts,
+            "base_scores": base_scores,
+            "base_mean_score": base_mean_score,
         }
+       
     }
     return results_dict
 
 
-
-# def create_dict_result(new_prompts_and_scores, base_prompts, base_scores):
-#     # Ideia: Ter no final: {pca_prompts: base_prompts: List[str], base_scores: List[float], base_mean_score: float, new_prompts: List[5 items], ica_prompts: idem, lca_pca_prompts: idem, sa_ica, sa_pca, sa_lca_pca}
-#     # Com isso depois salvamos esses dados é só plotar os dados
-#     final_result = new_prompts_and_scores.copy()
-#     for key, value in new_prompts_and_scores.items():
-#         final_result[key]["base_prompts"] = base_prompts
-#         final_result[key]["base_scores"] = base_scores
-#         final_result[key]["base_mean_score"] = np.mean(final_result[key]["base_scores"])
-
-#     return final_result
 
 def get_approaches_results(output_dir="results-jailbreak-set/get_approaches_results.json"):
     data = load_data()
@@ -255,24 +302,21 @@ def get_approaches_results(output_dir="results-jailbreak-set/get_approaches_resu
             data
         )
         base_prompts, base_scores = get_base_prompts_and_scores(sim_prompts, data)
+        baw_score_weighted_pca = score_weighted_pca(cluster_embeddings, np.array(base_scores), k=50)
         centered_embeddings, centroid = get_centroid(cluster_embeddings)
         baw_pca = apply_pca(centered_embeddings, centroid)
         baw_ica = apply_ica(centered_embeddings, centroid, n_components=5)
-        baw_lca_pca, elite_mask = apply_lca_pca(data, top_n, cluster_embeddings)
-        base_prompts_np = np.array(base_prompts)
-        base_scores_np = np.array(base_scores)
-        base_prompts_lca = base_prompts_np[elite_mask].tolist()
-        base_scores_lca = base_scores_np[elite_mask].tolist()
+       # baw_lca_pca, elite_mask = apply_lca_pca(data, top_n, cluster_embeddings)
+        #base_prompts_lca = base_prompts_np[elite_mask].tolist()
+        #base_scores_lca = base_scores_np[elite_mask].tolist()
         new_prompts = get_new_prompts(
             sanitizer=sanitizer,
             malicious_request=request,
             pca_result=baw_pca, 
             ica_result=baw_ica, 
-            lca_pca_result=baw_lca_pca,
+            score_weighted_pca_result=baw_score_weighted_pca,
             base_prompts=base_prompts,
             base_scores=base_scores,
-            base_prompts_lca=base_prompts_lca,
-            base_scores_lca=base_scores_lca,
         )
         all_new_prompts.append(new_prompts)
 
