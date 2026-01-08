@@ -220,7 +220,7 @@ class LocalModelTransformers():
             
             final_responses = []
             for i in range(len(output_ids)):
-                input_length = inputs['input_ids'][i].ne(self.tokenizer.pad_token_id).sum().item()
+                input_length = inputs['input_ids'].shape[1]
                 generated_tokens = output_ids[i][input_length:]
                 decoded_text = self.tokenizer.decode(generated_tokens, skip_special_tokens=True, clean_up_tokenization_spaces=True).strip()
                 processed_response = self.wrapper(decoded_text)
