@@ -317,17 +317,21 @@ def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result,
             generated = sanitizer.batch_generate(
                 user_prompt = template.user_prompt,
                 system_prompt = template.system_prompt,
-                num_samples=1,
+                num_samples=num_prompts,
                 condition=template.condition,
                 temperature=template.temperature,
                 max_tokens=template.max_tokens,
-            )[0]
-            prompts.append(generated["response"])
-            input_prompts_len.append(generated["input_tokens_len"])
-            output_prompts_len.append(generated["output_tokens_len"])
-            total_tokens_len.append(generated["total_tokens_len"])
+            )
+            prompts = []
+            input_prompts_len = []
+            output_prompts_len = []
+            total_tokens_len = []
+            # prompts.append(generated["response"])
+            # input_prompts_len.append(generated["input_tokens_len"])
+            # output_prompts_len.append(generated["output_tokens_len"])
+            # total_tokens_len.append(generated["total_tokens_len"])
             if monitor:
-                metrics, metrics_dict = monitor.end_operation(tokens=total_tokens_len)
+                _, metrics_dict = monitor.end_operation(tokens=total_tokens_len)
 
         original_bow_data = kwargs.get(kwarg_key_map.get(key), [])
         results_dict[key] = {
