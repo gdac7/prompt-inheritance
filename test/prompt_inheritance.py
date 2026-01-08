@@ -309,7 +309,7 @@ def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result,
         output_prompts_len = []
         total_tokens_len = []
 
-        for i in range(num_prompts):
+        for _ in range(num_prompts):
             if monitor:
                 monitor.start_operation(f"{key}_prompt_generation")
             generated = sanitizer.batch_generate(
