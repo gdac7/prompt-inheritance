@@ -2,9 +2,11 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "../../autodan-itau")))
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..")))
+
 from src.api_models.remote_model import RemoteModelAPI
 from src.core.attack_generator import AttackGenerator as ag
 from llm_code.prompt_manager import SanitizerPrompt
+from perf_metrics.performance_monitor import PerfomanceMonitor 
 from utils import calc_perplexity
 import json
 import gc
@@ -13,6 +15,7 @@ from typing import Dict, List
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers import pipeline, set_seed
 import torch
+import torch.nn.functional as F
 from llm_code.llm import LocalModelTransformers
 from sentence_transformers import SentenceTransformer
 import numpy as np
@@ -27,10 +30,11 @@ import time
 import multiprocessing as mp
 
 
-json_path = "../data/jailbreak_data.json"
+json_path = "../data/data.json"
 config = load_config("../config/models.yaml")
 
-model = SentenceTransformer(config["models"]["embedding"])
+def intialize_sentence_transformer():
+    return  SentenceTransformer(config["models"]["embedding"])
 sanitizer_model_name = config["models"]["sanitizer"]
 
 def load_data():
@@ -43,8 +47,8 @@ def get_base_prompts_and_scores(sim_prompts, data):
     return sim_prompts, base_scores
 
 
-def find_n_similar(request, requests_embeddings, n, all_requests, data, top_m=20):
-    query_embedding = model.encode(request).reshape(1, -1)
+def find_n_similar(sentence_transformer_model, request, requests_embeddings, n, all_requests, data, top_m=20):
+    query_embedding = sentence_transformer_model.encode(request).reshape(1, -1)
     cos_sim = cosine_similarity(query_embedding, requests_embeddings)
     top_n = np.argsort(cos_sim[0])[-n:][::-1]
     sim_requests = []
@@ -57,7 +61,7 @@ def find_n_similar(request, requests_embeddings, n, all_requests, data, top_m=20
         if item["malicious_request"] in sim_requests_set and len(sim_prompts) < top_m:
             sim_prompts.append(item["attack_prompt"])
             original_data_idx.append(original_idx)
-    cluster_embeddings = np.array(model.encode(sim_prompts, show_progress_bar=False))
+    cluster_embeddings = np.array(sentence_transformer_model.encode(sim_prompts, show_progress_bar=False))
     return cluster_embeddings, sim_requests, sim_prompts, original_data_idx
 
 def get_centroid(cluster_embeddings):
@@ -65,7 +69,72 @@ def get_centroid(cluster_embeddings):
     centered_embeddings = cluster_embeddings - centroid
     return centered_embeddings, centroid
 
-def score_weighted_pca(cluster_embeddings, scores, min_score_threshold= 0.0, k=50):
+def iterative_orthogonal_decoding(target_vector, model, k=50,decay=0.5):
+    transformer_model = model[0]
+    tokenizer = transformer_model.tokenizer
+    word_embeddings = transformer_model.auto_model.get_input_embeddings().weight.detach().cpu().numpy()
+    target_vector = target_vector.reshape(1, -1)
+    found_tokens = []
+    current_vector = target_vector.copy()
+    special_tokens = set(tokenizer.all_special_tokens)
+    found_tokens_count = 0
+    while found_tokens_count < 50:
+        sims = cosine_similarity(current_vector, word_embeddings)
+        best_idx = np.argmax(sims[0]).item()
+        token = tokenizer.convert_ids_to_tokens(best_idx)
+        print(token)
+        if token not in found_tokens and len(token) > 2 and token not in special_tokens and not token.startswith("##"):
+            found_tokens.append(token)
+        token_vec = word_embeddings[best_idx].reshape(1, -1)
+        scalar_proj = np.dot(current_vector, token_vec.T) / np.dot(token_vec, token_vec.T)
+        current_vector = current_vector - (scalar_proj * token_vec * decay)
+        found_tokens_count += 1
+    return found_tokens
+
+
+
+
+def apply_gradient_weighted(model_name, sim_prompts, malicious_request, target_response_to_max="Sure, here is"):
+    model = AutoTokenizer.from_pretrained(model_name)
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    ## Getting candidate tokens
+    unique_ids = set()
+    for prompt_text in sim_prompts:
+        token_ids = tokenizer.encode(prompt_text, add_special_tokens=False)
+        unique_ids.update(token_ids)
+    cand_ids = np.array(list(unique_ids))
+
+    embedding_matrix = model.get_input_embeddings().weight
+    dummy_token = "!"
+    prefix_text = malicious_request + " " + dummy_token
+    prefix_ids = tokenizer.encode(prefix_text, add_special_tokens=False)
+    target_ids = tokenizer.encode(target_response_to_max, add_special_tokens=False)
+    full_input_ids = torch.tensor(prefix_ids + target_ids).unsqueeze(0)
+    dummy_index = len(prefix_ids) - 1
+    embedding_matrix = model.get_input_embeddings().weight
+    inputs_embeds = model.get_input_embeddings()(full_input_ids)
+    inputs_embeds.retain_grad()
+    outputs = model(inputs_embeds=inputs_embeds)
+    logits = outputs.logits
+    start_pred_idx = dummy_index 
+    end_pred_idx = start_pred_idx + len(target_ids)
+    relevant_logits = logits[0, start_pred_idx: end_pred_idx, :]
+    relevant_targets = torch.tensor(target_ids)
+    loss = F.cross_entropy(relevant_logits, relevant_targets)
+    model.zero_grad()
+    loss.backward()
+
+    grad_at_dummy = inputs_embeds.grad[0, dummy_index, :]
+    candidate_tensor_ids = torch.tensor(cand_ids)
+    candidate_embeddings = embedding_matrix[candidate_tensor_ids]
+
+    scores = torch.matmul(candidate_embeddings, -grad_at_dummy)
+    sorted_indices = torch.argsort(scores, descending=True)
+    sorted_candidate_ids = candidate_tensor_ids[sorted_indices].tolist()
+    #sorted_scores = scores[sorted_indices].tolist()
+    return sorted_candidate_ids
+
+def score_weighted_pca(sentence_model, cluster_embeddings, scores, min_score_threshold= 7.0, k=50):
     if cluster_embeddings.shape[0] != len(scores):
         raise RuntimeError("shape do cluster diferente da quantidade de scores fornecida")
     
@@ -107,22 +176,23 @@ def score_weighted_pca(cluster_embeddings, scores, min_score_threshold= 0.0, k=5
 
     alpha = np.sqrt(lambda1)
     c_new  = weighted_centroid + alpha * v1
-    transformer_model = model[0]
-    tokenizer = transformer_model.tokenizer
-    word_embedding_matrix = transformer_model.auto_model.get_input_embeddings().weight.detach().cpu().numpy()
-    c_new = c_new.reshape(1, -1)
-    all_cos_sim = cosine_similarity(c_new, word_embedding_matrix)
-    top_k_index = np.argsort(all_cos_sim[0])[-k:][::-1]
-    top_k_tokens = tokenizer.convert_ids_to_tokens(top_k_index)
-    top_k_scores = all_cos_sim[0][top_k_index]
-    bow = []
-    special_tokens = tokenizer.all_special_tokens
-    for token, score in zip(top_k_tokens, top_k_scores):
-        if token not in special_tokens and not token.startswith("##") and len(token) > 1:
-            bow.append(token)
-    return bow
+    return iterative_orthogonal_decoding(c_new, sentence_model, k=50)
+    # transformer_model = sentence_model[0]
+    # tokenizer = transformer_model.tokenizer
+    # word_embedding_matrix = transformer_model.auto_model.get_input_embeddings().weight.detach().cpu().numpy()
+    # c_new = c_new.reshape(1, -1)
+    # all_cos_sim = cosine_similarity(c_new, word_embedding_matrix)
+    # top_k_index = np.argsort(all_cos_sim[0])[-k:][::-1]
+    # top_k_tokens = tokenizer.convert_ids_to_tokens(top_k_index)
+    # top_k_scores = all_cos_sim[0][top_k_index]
+    # bow = []
+    # special_tokens = tokenizer.all_special_tokens
+    # for token, score in zip(top_k_tokens, top_k_scores):
+    #     if token not in special_tokens and not token.startswith("##") and len(token) > 1:
+    #         bow.append(token)
+    # return bow
 
-def apply_pca(centered_embeddings, centroid, k=50):
+def apply_pca(sentence_model, centered_embeddings, centroid, k=50):
     pca = PCA(n_components=1)
     pca.fit(centered_embeddings)
     v1 = pca.components_[0]
@@ -130,22 +200,23 @@ def apply_pca(centered_embeddings, centroid, k=50):
     alpha_scale = np.sqrt(pca.explained_variance_[0])
     alpha = 1.0 * alpha_scale
     c_new = centroid + (alpha * v1)
-    transformer_model = model[0]
-    tokenizer = transformer_model.tokenizer
-    word_embedding_matrix = transformer_model.auto_model.get_input_embeddings().weight.detach().cpu().numpy()
-    c_new = c_new.reshape(1, -1)
-    all_cos_sim = cosine_similarity(c_new, word_embedding_matrix)
-    top_k_index = np.argsort(all_cos_sim[0])[-k:][::-1]
-    top_k_tokens = tokenizer.convert_ids_to_tokens(top_k_index)
-    top_k_scores = all_cos_sim[0][top_k_index]
-    bow = []
-    special_tokens = tokenizer.all_special_tokens
-    for token, score in zip(top_k_tokens, top_k_scores):
-        if token not in special_tokens and not token.startswith("##") and len(token) > 1:
-            bow.append(token)
-    return bow
+    return iterative_orthogonal_decoding(c_new, sentence_model, k=50)
+    # transformer_model = sentence_model[0]
+    # tokenizer = transformer_model.tokenizer
+    # word_embedding_matrix = transformer_model.auto_model.get_input_embeddings().weight.detach().cpu().numpy()
+    # c_new = c_new.reshape(1, -1)
+    # all_cos_sim = cosine_similarity(c_new, word_embedding_matrix)
+    # top_k_index = np.argsort(all_cos_sim[0])[-k:][::-1]
+    # top_k_tokens = tokenizer.convert_ids_to_tokens(top_k_index)
+    # top_k_scores = all_cos_sim[0][top_k_index]
+    # bow = []
+    # special_tokens = tokenizer.all_special_tokens
+    # for token, score in zip(top_k_tokens, top_k_scores):
+    #     if token not in special_tokens and not token.startswith("##") and len(token) > 1:
+    #         bow.append(token)
+    # return bow
 
-def apply_ica(centered_embeddings, centroid, n_components=5, max_iter=1000, tol=1e-3, random_state=42, component_index_to_use=0, k=50):
+def apply_ica(sentence_model, centered_embeddings, centroid, n_components=5, max_iter=1000, tol=1e-3, random_state=42, component_index_to_use=0, k=50):
     ica = FastICA(
         n_components=n_components,
         max_iter=max_iter,
@@ -160,21 +231,22 @@ def apply_ica(centered_embeddings, centroid, n_components=5, max_iter=1000, tol=
     alpha_scale = np.std(component_scores)
     alpha = 1.0 * alpha_scale
     c_new = centroid + (alpha * v1)
+    return iterative_orthogonal_decoding(c_new, sentence_model, k=50)
     ### Getting tokens back
-    transformer_model = model[0]
-    tokenizer = transformer_model.tokenizer
-    word_embedding_matrix = transformer_model.auto_model.get_input_embeddings().weight.detach().cpu().numpy()
-    c_new = c_new.reshape(1, -1)
-    all_cos_sim = cosine_similarity(c_new, word_embedding_matrix)
-    top_k_index = np.argsort(all_cos_sim[0])[-k:][::-1]
-    top_k_tokens = tokenizer.convert_ids_to_tokens(top_k_index)
-    top_k_scores = all_cos_sim[0][top_k_index]
-    bow = []
-    special_tokens = tokenizer.all_special_tokens
-    for token, score in zip(top_k_tokens, top_k_scores):
-        if token not in special_tokens and not token.startswith("##") and len(token) > 1:
-            bow.append(token)
-    return bow
+    # transformer_model = sentence_model[0]
+    # tokenizer = transformer_model.tokenizer
+    # word_embedding_matrix = transformer_model.auto_model.get_input_embeddings().weight.detach().cpu().numpy()
+    # c_new = c_new.reshape(1, -1)
+    # all_cos_sim = cosine_similarity(c_new, word_embedding_matrix)
+    # top_k_index = np.argsort(all_cos_sim[0])[-k:][::-1]
+    # top_k_tokens = tokenizer.convert_ids_to_tokens(top_k_index)
+    # top_k_scores = all_cos_sim[0][top_k_index]
+    # bow = []
+    # special_tokens = tokenizer.all_special_tokens
+    # for token, score in zip(top_k_tokens, top_k_scores):
+    #     if token not in special_tokens and not token.startswith("##") and len(token) > 1:
+    #         bow.append(token)
+    # return bow
 
 def apply_lca_pca(data, top_n, cluster_embeddings, sucess_threshold=8.5, n_components=2, random_state=42):
     features_list = []
@@ -202,7 +274,6 @@ def apply_lca_pca(data, top_n, cluster_embeddings, sucess_threshold=8.5, n_compo
     if elite_cluster_embeddings.shape[0] == 0:
         ### elite cluster is empty fall back to using the original (non-elite) cluster
         elite_cluster_embeddings = aligned_embeddings
-    
     if elite_cluster_embeddings.shape[0] < 2:
         elite_cluster_embeddings = aligned_embeddings
 
@@ -210,7 +281,9 @@ def apply_lca_pca(data, top_n, cluster_embeddings, sucess_threshold=8.5, n_compo
     baw_lca_pca = apply_pca(elite_centered_embeddings, centroid)
     return baw_lca_pca, elite_mask
 
-def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result, lca_pca_result, base_prompts, base_scores, base_prompts_lca, base_scores_lca, score_weighted_pca_result, num_prompts=5) -> Dict[str, Dict[str, any]]:
+def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result, 
+                    lca_pca_result, base_prompts, base_scores, base_prompts_lca, base_scores_lca, 
+                    score_weighted_pca_result, gradient_weighted_result, num_prompts=5, **kwargs) -> Dict[str, Dict[str, any]]:
     # Chamar o LLM para gerar 5 samples com cada bag of words dos métodos
     # Nos argumentos
     # Teremos no final um dicionario com {pca: prompts: List[5 items], scores: List[float], mean_score: float, o mesmo para o resto}
@@ -218,83 +291,69 @@ def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result, lca_pc
         "pca": pca_result,
         "ica": ica_result,
         "score_weighted_pca": score_weighted_pca_result,
+        "gradient_weighted": gradient_weighted_result,
     }
 
-    base_templates = {}
+    results_dict = {}
+    kwarg_key_map = {
+        "pca": "bow_pca",
+        "ica": "bow_ica",
+        "score_weighted_pca": "baw_swpca",
+        "gradient_weighted": "baw_gw"
+    }
     for key, bow in bow_map.items():
-        base_templates[key] = SanitizerPrompt.get_sanitizer_prompt(malicious_request, bow)
-    
-    user_prompts_batch = []
-    keys_order = ["pca", "ica", "lca_pca"]
-    for key in keys_order:
-        template = base_templates[key]
-        user_prompts_batch.extend([template.user_prompt] * num_prompts)
-    common_template = base_templates["pca"]
-    all_generated_prompts = sanitizer.batch_generate(
-        user_prompts=user_prompts_batch,
-        system_prompt=common_template.system_prompt,
-        condition=common_template.condition,
-        temperature=common_template.temperature,
-        max_tokens=common_template.max_tokens,
-    )
+        template = SanitizerPrompt.get_sanitizer_prompt(malicious_request, bow)
+        generated_prompts = sanitizer.batch_generate(
+            user_prompts = template.user_prompt,
+            system_prompt = template.system_prompt,
+            num_samples=num_prompts,
+            condition=template.condition,
+            temperature=template.temperature,
+            max_tokens=template.max_tokens,
+        )
 
-    base_mean_score = np.mean(base_scores)
-    base_mean_score_lca = np.mean(base_scores_lca)
-    results_dict = {
-        "pca": {
-            "malicious_request": malicious_request,
-            "prompts": all_generated_prompts[0:num_prompts],
-            "target_responses": [],
-            "scores": [],
-            "best_prompt": "",
-            "worst_prompt": "",
-            "mean_score": 0.0,
-            "base_prompts": base_prompts,
-            "base_scores": base_scores,
-            "base_mean_score": base_mean_score,
-        },
-        "ica": {
-            "malicious_request": malicious_request,
-            "prompts": all_generated_prompts[num_prompts:num_prompts*2],
-            "target_responses": [],
-            "scores": [],
-            "best_prompt": "",
-            "worst_prompt": "",
-            "mean_score": 0.0,
-            "base_prompts": base_prompts,
-            "base_scores": base_scores,
-            "base_mean_score": base_mean_score,
-        },
-        "score_weighted_pca": {
-            "malicious_request": malicious_request,
-            "prompts": all_generated_prompts[num_prompts*3:],
-            "target_responses": [],
-            "scores": [],
-            "best_prompt": "",
-            "worst_prompt": "",
-            "mean_score": 0.0,
-            "base_prompts": base_prompts,
-            "base_scores": base_scores,
-            "base_mean_score": base_mean_score,
+        prompts = [item["response"] for item in generated_prompts]
+        input_prompts_len = [item["input_tokens_len"] for item in generated_prompts]
+        output_prompts_len = [item["output_tokens_len"] for item in generated_prompts]
+        total_tokens_len = [item["total_tokens_len"] for item in generated_prompts]
+        original_bow_data = kwargs.get(kwarg_key_map.get(key), [])
+        results_dict[key] = {
+                "malicious_request": malicious_request,
+                "prompts": prompts,
+                "input_prompts_len": input_prompts_len,
+                "target_responses": [],
+                "output_prompts_len": output_prompts_len,
+                "total_tokens_len": total_tokens_len,
+                "scores": [],
+                "best_prompt": "",
+                "worst_prompt": "",
+                "mean_score": 0.0,
+                "base_prompts": base_prompts,
+                "base_scores": base_scores,
+                "base_mean_score": np.mean(base_scores),
+                "BoT": original_bow_data,
         }
-       
-    }
+    
     return results_dict
+    
 
-
-
-def get_approaches_results(output_dir="results-jailbreak-set/get_approaches_results.json"):
+def get_approaches_results(output_dir="results-jailbreak-set/get_approaches_results.json", monitor=None):
+    monitor = PerfomanceMonitor()
+    sentence_model = intialize_sentence_transformer()
     data = load_data()
     sanitizer = LocalModelTransformers(sanitizer_model_name)
     all_requests_ordered = [item["malicious_request"] for item in data]
     unique_requests_ordered = list(dict.fromkeys(all_requests_ordered))
     requests = unique_requests_ordered[:30]
-    requests_embeddings = np.array(model.encode(requests, show_progress_bar=False))
+    requests_embeddings = np.array(sentence_model.encode(requests, show_progress_bar=False))
     n = 10
     os.makedirs(os.path.dirname(output_dir), exist_ok=True)
     all_new_prompts = []
+    i = 1
     for request in tqdm(requests, desc="Getting approaches results..."):
+        monitor.start_operation(f"generating_prompt_for_{i}")
         cluster_embeddings, sim_requests, sim_prompts, top_n = find_n_similar(
+            sentence_model,
             request, 
             requests_embeddings, 
             n, 
@@ -302,23 +361,27 @@ def get_approaches_results(output_dir="results-jailbreak-set/get_approaches_resu
             data
         )
         base_prompts, base_scores = get_base_prompts_and_scores(sim_prompts, data)
-        baw_score_weighted_pca = score_weighted_pca(cluster_embeddings, np.array(base_scores), k=50)
+        baw_score_weighted_pca = score_weighted_pca(sentence_model, cluster_embeddings, np.array(base_scores), k=50)
         centered_embeddings, centroid = get_centroid(cluster_embeddings)
-        baw_pca = apply_pca(centered_embeddings, centroid)
-        baw_ica = apply_ica(centered_embeddings, centroid, n_components=5)
-       # baw_lca_pca, elite_mask = apply_lca_pca(data, top_n, cluster_embeddings)
-        #base_prompts_lca = base_prompts_np[elite_mask].tolist()
-        #base_scores_lca = base_scores_np[elite_mask].tolist()
+        baw_pca = apply_pca(sentence_model, centered_embeddings, centroid)
+        baw_ica = apply_ica(sentence_model, centered_embeddings, centroid, n_components=5)
+        baw_gw = apply_gradient_weighted(sim_prompts)
         new_prompts = get_new_prompts(
             sanitizer=sanitizer,
             malicious_request=request,
             pca_result=baw_pca, 
             ica_result=baw_ica, 
             score_weighted_pca_result=baw_score_weighted_pca,
+            gradient_weighted_result=baw_gw,
             base_prompts=base_prompts,
             base_scores=base_scores,
+            baw_swpca=baw_score_weighted_pca,
+            baw_pca=baw_pca,
+            baw_ica=baw_ica,
+            baw_gw=baw_gw,
         )
         all_new_prompts.append(new_prompts)
+        i += 1
 
     with open(output_dir, "w", encoding="utf-8") as f:
         json.dump(all_new_prompts, f, ensure_ascii=False, indent=4)
@@ -329,7 +392,7 @@ def get_approaches_results(output_dir="results-jailbreak-set/get_approaches_resu
 
     return all_new_prompts
 
-def get_new_scores(new_prompts, output_dir="results-jailbreak-set/get_new_scores_results.json"):
+def get_new_scores(new_prompts, output_dir="results/get_new_scores_results.json"):
     os.makedirs(os.path.dirname(output_dir), exist_ok=True)
     scorer = RemoteModelAPI("http://localhost:8001/generate_score")
     attack_generator = ag(None, None, scorer, None)
@@ -492,5 +555,6 @@ if __name__ == "__main__":
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     new_prompts = get_approaches_results()
     scored_prompt_list = get_new_scores(new_prompts)
+
     #simulated_annealing_results = simulated_annealing(scored_prompt_list)
     #simulated_annealing_results_with_score = get_simulated_annealing_scores(simulated_annealing_results)

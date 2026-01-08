@@ -2,7 +2,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 from datetime import datetime
 from typing import List, Dict, Optional
-
+from perf_metrics.performance_monitor import PerfomanceMonitor
 class LocalModelTransformers():
     def __init__(self, model_name, device: str = "auto"):
         self.model_name = model_name
@@ -80,7 +80,7 @@ class LocalModelTransformers():
         torch.cuda.empty_cache()
         return final_response
 
-    def batch_generate(self, user_prompts: List[str], system_prompt: str=None, max_tokens: int=4096, temperature: float=0.7, condition: Optional[str] = None):
+    def batch_generate(self, user_prompt: str, system_prompt: str=None, max_tokens: int=4096, temperature: float=0.7, condition: Optional[str] = None, num_samples: int = 1, monitor=None, approach: str = ""):
         generation_params = {
             "max_new_tokens": max_tokens,
             "pad_token_id": self.tokenizer.eos_token_id
@@ -89,33 +89,28 @@ class LocalModelTransformers():
             generation_params["do_sample"] = True
             generation_params["temperature"] = temperature
         
-        if condition is None:
-            condition = ""
-    
-        batch_plain_text = []
+        condition = condition if condition else ""
+        final_prompt_text = ""
+        has_chat_template = getattr(self.tokenizer, "chat_template", None) is not None
+        if has_chat_template:
+            try:
+                messages = [{"role": "user", "content": user_prompt}]
+                if system_prompt:
+                    messages.insert(0, {"role": "system", "content": system_prompt})
+                final_prompt_text = self.tokenizer.apply_chat_template(
+                    messages, 
+                    tokenize=False,
+                    add_generation_prompt=True
+                )
+            except Exception:
+                ## Fallback em caso de erro no template
+                final_prompt_text = f"{system_prompt}\n\n{user_prompt}" if system_prompt else user_prompt
+        else:
+            final_prompt_text = f"{system_prompt}\n\n{user_prompt}" if system_prompt else user_prompt
+
+        final_prompt_text += condition
+        batch_plain_text = [final_prompt_text] * num_samples
         with torch.inference_mode():
-            for i, user_prompt in enumerate(user_prompts):
-                if getattr(self.tokenizer, "chat_template", None):
-                    try:
-                        messages = [
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": user_prompt}
-                        ]
-                        plain_text = self.tokenizer.apply_chat_template(
-                            messages,
-                            tokenize=False,
-                            add_generation_prompt=True
-                        )
-                        plain_text += condition
-                        batch_plain_text.append(plain_text)
-                    except Exception as e:
-                        plain_text = f"{system_prompt}\n\n{user_prompt}" if system_prompt else user_prompt
-                        plain_text += condition
-                        batch_plain_text.append(plain_text)
-                else:
-                    plain_text = f"{system_prompt}\n\n{user_prompt}" if system_prompt else user_prompt
-                    plain_text += condition
-                    batch_plain_text.append(plain_text)
             inputs = self.tokenizer(
                 batch_plain_text,
                 return_tensors="pt",
@@ -129,15 +124,23 @@ class LocalModelTransformers():
             final_responses = []
             for i in range(len(output_ids)):
                 generated_tokens = output_ids[i][input_length:]
-                final_response = self.tokenizer.decode(generated_tokens, skip_special_tokens=True).strip()
-                final_response = self.wrapper(final_response)
-                final_responses.append(final_response)
-            
-            
-            del inputs
-            del output_ids
-            torch.cuda.empty_cache()
-            return final_responses
+                decoded_text = self.tokenizer.decode(generated_tokens, skip_special_tokens=True).strip()
+                processed_response = self.wrapper(decoded_text)
+                output_length = len(generated_tokens)
+                final_responses.append({
+                    "response": processed_response,
+                    "input_tokens_len": input_length,
+                    "output_token_len": output_length,
+                    "total_tokens_len": input_length + output_length
+                }
+                )
+               
+        del inputs
+        del output_ids
+        torch.cuda.empty_cache() 
+        return final_responses
+    
+   
 
     
     
