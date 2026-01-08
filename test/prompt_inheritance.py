@@ -132,6 +132,8 @@ def apply_gradient_weighted(model_name, sim_prompts, malicious_request, target_r
     sorted_indices = torch.argsort(scores, descending=True)
     sorted_candidate_ids = candidate_tensor_ids[sorted_indices].tolist()
     #sorted_scores = scores[sorted_indices].tolist()
+    del model
+    del tokenizer
     return sorted_candidate_ids
 
 def score_weighted_pca(sentence_model, cluster_embeddings, scores, min_score_threshold= 7.0, k=50):
