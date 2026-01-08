@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 import time
 import json
 import os
@@ -25,6 +25,7 @@ class ComputationalMetrics:
             'tokens_processed': self.tokens_processed,
             'timestamp': self.timestamp
         }
+    
 
 class PerfomanceMonitor:
     def __init__(self):
@@ -44,7 +45,7 @@ class PerfomanceMonitor:
         else:
             self.start_gpu_memory = 0.0
         
-    def end_operation(self, tokens: int = 0) -> ComputationalMetrics:
+    def end_operation(self, tokens: int = 0) -> Tuple[ComputationalMetrics, Dict]:
         if self.current_operation is None:
             raise RuntimeError("Call start_operation() first")
         elapsed_time = time.time() - self.start_time
@@ -72,8 +73,9 @@ class PerfomanceMonitor:
         self.start_memory = None
         self.start_gpu_memory = None
 
-        return metric
-    
+        return metric, metric.to_dict()
+
+
     def get_summary(self) -> Dict:
         if not self.metrics:
             return {"error": "No metrics"}

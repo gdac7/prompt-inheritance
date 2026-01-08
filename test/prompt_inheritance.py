@@ -283,10 +283,11 @@ def apply_lca_pca(data, top_n, cluster_embeddings, sucess_threshold=8.5, n_compo
 
 def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result, 
                     lca_pca_result, base_prompts, base_scores, base_prompts_lca, base_scores_lca, 
-                    score_weighted_pca_result, gradient_weighted_result, num_prompts=5, **kwargs) -> Dict[str, Dict[str, any]]:
+                    score_weighted_pca_result, gradient_weighted_result, bot_creation_cost: dict, num_prompts=5, **kwargs) -> Dict[str, Dict[str, any]]:
     # Chamar o LLM para gerar 5 samples com cada bag of words dos métodos
     # Nos argumentos
     # Teremos no final um dicionario com {pca: prompts: List[5 items], scores: List[float], mean_score: float, o mesmo para o resto}
+    monitor = PerfomanceMonitor()
     bow_map = {
         "pca": pca_result,
         "ica": ica_result,
@@ -303,19 +304,29 @@ def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result,
     }
     for key, bow in bow_map.items():
         template = SanitizerPrompt.get_sanitizer_prompt(malicious_request, bow)
-        generated_prompts = sanitizer.batch_generate(
-            user_prompts = template.user_prompt,
-            system_prompt = template.system_prompt,
-            num_samples=num_prompts,
-            condition=template.condition,
-            temperature=template.temperature,
-            max_tokens=template.max_tokens,
-        )
+        prompts = []
+        input_prompts_len = []
+        output_prompts_len = []
+        total_tokens_len = []
 
-        prompts = [item["response"] for item in generated_prompts]
-        input_prompts_len = [item["input_tokens_len"] for item in generated_prompts]
-        output_prompts_len = [item["output_tokens_len"] for item in generated_prompts]
-        total_tokens_len = [item["total_tokens_len"] for item in generated_prompts]
+        for i in range(num_prompts):
+            if monitor:
+                monitor.start_operation(f"{key}_prompt_generation")
+            generated = sanitizer.batch_generate(
+                user_prompts = template.user_prompt,
+                system_prompt = template.system_prompt,
+                num_samples=1,
+                condition=template.condition,
+                temperature=template.temperature,
+                max_tokens=template.max_tokens,
+            )[0]
+            prompts.append(generated["response"])
+            input_prompts_len.append(generated["input_tokens"])
+            output_prompts_len.append(generated["output_tokens"])
+            total_tokens_len.append(generated["total_tokens"])
+            if monitor:
+                metrics, metrics_dict = monitor.end_operation(tokens=total_tokens_len)
+
         original_bow_data = kwargs.get(kwarg_key_map.get(key), [])
         results_dict[key] = {
                 "malicious_request": malicious_request,
@@ -332,6 +343,8 @@ def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result,
                 "base_scores": base_scores,
                 "base_mean_score": np.mean(base_scores),
                 "BoT": original_bow_data,
+                "BoT_creation_cost": bot_creation_cost[key],
+                "prompt_generation_cost": metrics_dict
         }
     
     return results_dict
@@ -350,6 +363,7 @@ def get_approaches_results(output_dir="results-jailbreak-set/get_approaches_resu
     os.makedirs(os.path.dirname(output_dir), exist_ok=True)
     all_new_prompts = []
     i = 1
+    bow_cost_dict = {}
     for request in tqdm(requests, desc="Getting approaches results..."):
         monitor.start_operation(f"generating_prompt_for_{i}")
         cluster_embeddings, sim_requests, sim_prompts, top_n = find_n_similar(
@@ -361,11 +375,24 @@ def get_approaches_results(output_dir="results-jailbreak-set/get_approaches_resu
             data
         )
         base_prompts, base_scores = get_base_prompts_and_scores(sim_prompts, data)
+        monitor.start_operation("sw_creation_baw_cost")
         baw_score_weighted_pca = score_weighted_pca(sentence_model, cluster_embeddings, np.array(base_scores), k=50)
+        _, sw_bow_metrics_dict = monitor.end_operation("sw_creation_baw_cost")
+        bow_cost_dict["score_weighted_pca"] = sw_bow_metrics_dict
         centered_embeddings, centroid = get_centroid(cluster_embeddings)
+        monitor.start_operation("pca_creation_baw_cost")
         baw_pca = apply_pca(sentence_model, centered_embeddings, centroid)
+        _, pca_bow_metrics_dict = monitor.end_operation("pca_creation_baw_cost")
+        bow_cost_dict["pca"] = pca_bow_metrics_dict
+        monitor.start_operation("ica_creation_baw_cost")
         baw_ica = apply_ica(sentence_model, centered_embeddings, centroid, n_components=5)
+        _, ica_bow_metrics_dict = monitor.end_operation("ica_creation_baw_cost")
+        bow_cost_dict["ica"] = ica_bow_metrics_dict
+        monitor.start_operation("gw_creation_baw_cost")
         baw_gw = apply_gradient_weighted(sim_prompts)
+        _, gw_bow_metrics_dict = monitor.end_operation("gw_creation_baw_cost")
+        bow_cost_dict["gradient_weighted"] = gw_bow_metrics_dict
+        
         new_prompts = get_new_prompts(
             sanitizer=sanitizer,
             malicious_request=request,
@@ -379,6 +406,7 @@ def get_approaches_results(output_dir="results-jailbreak-set/get_approaches_resu
             baw_pca=baw_pca,
             baw_ica=baw_ica,
             baw_gw=baw_gw,
+            bot_creation_cost=bow_cost_dict
         )
         all_new_prompts.append(new_prompts)
         i += 1
