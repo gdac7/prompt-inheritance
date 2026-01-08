@@ -325,7 +325,7 @@ def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result,
             prompts.append(generated["response"])
             input_prompts_len.append(generated["input_tokens_len"])
             output_prompts_len.append(generated["output_tokens_len"])
-            total_tokens_len.append(generated["total_tokens_len"])
+            total_tokens_len.append(generated["total_tokens"])
             if monitor:
                 metrics, metrics_dict = monitor.end_operation(tokens=total_tokens_len)
 
