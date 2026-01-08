@@ -21,7 +21,8 @@ class ComputationalMetrics:
             'operation': self.operation,
             'wall_time_seconds': round(self.wall_time, 4),
             'cpu_percent': round(self.cpu_percent, 2),
-            'memory_mb': round(self.gpu_memory_mb, 2),
+            'memory_mb': round(self.memory_mb, 2),
+            'gpu_memory_mb': round(self.gpu_memory_mb, 2),
             'tokens_processed': self.tokens_processed,
             'timestamp': self.timestamp
         }

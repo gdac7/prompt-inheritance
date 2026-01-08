@@ -310,12 +310,6 @@ def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result,
     }
 
     results_dict = {}
-    kwarg_key_map = {
-        "pca": "bow_pca",
-        "ica": "bow_ica",
-        "score_weighted_pca": "baw_swpca",
-        "gradient_weighted": "baw_gw"
-    }
     for key, bow in bow_map.items():
         print("\nEntrei\n")
         template = SanitizerPrompt.get_sanitizer_prompt(malicious_request, bow)
@@ -344,7 +338,6 @@ def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result,
             if monitor:
                 _, metrics_dict = monitor.end_operation(tokens=total_tokens_len)
 
-        original_bow_data = kwargs.get(kwarg_key_map.get(key), [])
         results_dict[key] = {
                 "malicious_request": malicious_request,
                 "prompts": prompts,
@@ -359,7 +352,7 @@ def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result,
                 "base_prompts": base_prompts,
                 "base_scores": base_scores,
                 "base_mean_score": np.mean(base_scores),
-                "BoT": original_bow_data,
+                "BoT": bow,
                 "BoT_creation_cost": bot_creation_cost[key],
                 "prompt_generation_cost": metrics_dict
         }
@@ -367,7 +360,7 @@ def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result,
     return results_dict
     
 
-def get_approaches_results(output_dir="results-jailbreak-set/get_approaches_results.json", monitor=None):
+def get_approaches_results(output_dir="results-sbrc/get_approaches_results.json", monitor=None):
     monitor = PerfomanceMonitor()
     sentence_model = intialize_sentence_transformer()
     data = load_data()
