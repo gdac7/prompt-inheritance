@@ -131,6 +131,7 @@ def apply_gradient_weighted(model_name, sim_prompts, malicious_request, target_r
     scores = torch.matmul(candidate_embeddings, -grad_at_dummy)
     sorted_indices = torch.argsort(scores, descending=True)
     sorted_candidate_ids = candidate_tensor_ids[sorted_indices].tolist()
+    print("GW finished")
     #sorted_scores = scores[sorted_indices].tolist()
     del model
     del tokenizer
