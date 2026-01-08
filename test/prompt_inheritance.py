@@ -321,7 +321,7 @@ def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result,
         for i in range(num_prompts):
             if monitor:
                 monitor.start_operation(f"{key}_prompt_generation")
-            generated = sanitizer.batch_generate(
+            generated = sanitizer.batch_generate_prompts(
                 user_prompt = template.user_prompt,
                 system_prompt = template.system_prompt,
                 num_samples=1,
@@ -430,7 +430,7 @@ def get_approaches_results(output_dir="results-sbrc/get_approaches_results.json"
 
     return all_new_prompts
 
-def get_new_scores(new_prompts, output_dir="results/get_new_scores_results.json"):
+def get_new_scores(new_prompts, output_dir="results-sbrc/get_new_scores_results.json"):
     os.makedirs(os.path.dirname(output_dir), exist_ok=True)
     scorer = RemoteModelAPI("http://localhost:8001/generate_score")
     attack_generator = ag(None, None, scorer, None)
@@ -440,7 +440,7 @@ def get_new_scores(new_prompts, output_dir="results/get_new_scores_results.json"
             best_score = -1
             worst_score = 11
             prompts = results["prompts"]   
-            target_responses = target.batch_generate(user_prompts=prompts)  
+            target_responses = target.batch_generate_target_responses(user_prompts=prompts)  
             scores = []
             for prompt, response in tqdm(zip(prompts, target_responses), desc="Getting score"):
                 score, _ = attack_generator._score_response(results["malicious_request"], prompt, response)
