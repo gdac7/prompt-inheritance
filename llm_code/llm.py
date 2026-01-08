@@ -242,8 +242,8 @@ class LocalModelTransformers():
 
         
         
-        def wrapper(self, response: str):
-            tag = "[END OF THE NEW PROMPT]"
-            if tag in response:
-                return response.split(tag)[0]
-            return response
+    def wrapper(self, response: str):
+        tag = "[END OF THE NEW PROMPT]"
+        if tag in response:
+            return response.split(tag)[0]
+        return response
