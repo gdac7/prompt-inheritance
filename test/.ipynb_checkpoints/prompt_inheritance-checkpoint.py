@@ -305,6 +305,7 @@ def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result,
         "gradient_weighted": "baw_gw"
     }
     for key, bow in bow_map.items():
+        print("\nEntrei\n")
         template = SanitizerPrompt.get_sanitizer_prompt(malicious_request, bow)
         prompts = []
         input_prompts_len = []
@@ -321,13 +322,15 @@ def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result,
                 condition=template.condition,
                 temperature=template.temperature,
                 max_tokens=template.max_tokens,
-            )[0]
-            prompts.append(generated["response"])
-            input_prompts_len.append(generated["input_tokens_len"])
-            output_prompts_len.append(generated["output_tokens_len"])
-            total_tokens_len.append(generated["total_tokens"])
+            )
+            print(f"\nGerado prompt {_} do método {key}\n")
+            print(generated)
+            prompts.append(generated[0]["response"])
+            input_prompts_len.append(generated[0]["input_tokens_len"])
+            output_prompts_len.append(generated[0]["output_tokens_len"])
+            total_tokens_len.append(generated[0]["total_tokens_len"])
             if monitor:
-                metrics, metrics_dict = monitor.end_operation(tokens=total_tokens_len)
+                _, metrics_dict = monitor.end_operation(tokens=total_tokens_len)
 
         original_bow_data = kwargs.get(kwarg_key_map.get(key), [])
         results_dict[key] = {

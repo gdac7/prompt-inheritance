@@ -131,10 +131,22 @@ def apply_gradient_weighted(model_name, sim_prompts, malicious_request, target_r
     scores = torch.matmul(candidate_embeddings, -grad_at_dummy)
     sorted_indices = torch.argsort(scores, descending=True)
     sorted_candidate_ids = candidate_tensor_ids[sorted_indices].tolist()
+    sorted_candidate_tokens = tokenizer.convert_ids_to_tokens(sorted_candidate_ids)
+    special_tokens = set(tokenizer.all_special_tokens)
+    filtered_tokens = []
+    top_k = 50
+    atual_k = 0
+    for token in sorted_candidate_tokens:
+        if token not in special_tokens and not token.startswith("##") and len(token) > 2:
+            filtered_tokens.append(token)
+            atual_k += 1
+        if atual_k == top_k:
+            break
+
     #sorted_scores = scores[sorted_indices].tolist()
     del model
     del tokenizer
-    return sorted_candidate_ids
+    return filtered_tokens
 
 def score_weighted_pca(sentence_model, cluster_embeddings, scores, min_score_threshold= 7.0, k=50):
     if cluster_embeddings.shape[0] != len(scores):
@@ -305,6 +317,7 @@ def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result,
         "gradient_weighted": "baw_gw"
     }
     for key, bow in bow_map.items():
+        print("\nEntrei\n")
         template = SanitizerPrompt.get_sanitizer_prompt(malicious_request, bow)
         prompts = []
         input_prompts_len = []
@@ -317,19 +330,17 @@ def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result,
             generated = sanitizer.batch_generate(
                 user_prompt = template.user_prompt,
                 system_prompt = template.system_prompt,
-                num_samples=num_prompts,
+                num_samples=1,
                 condition=template.condition,
                 temperature=template.temperature,
                 max_tokens=template.max_tokens,
             )
-            prompts = []
-            input_prompts_len = []
-            output_prompts_len = []
-            total_tokens_len = []
-            # prompts.append(generated["response"])
-            # input_prompts_len.append(generated["input_tokens_len"])
-            # output_prompts_len.append(generated["output_tokens_len"])
-            # total_tokens_len.append(generated["total_tokens_len"])
+            print(f"\nGerado prompt {_} do método {key}\n")
+            print(generated)
+            prompts.append(generated[0]["response"])
+            input_prompts_len.append(generated[0]["input_tokens_len"])
+            output_prompts_len.append(generated[0]["output_tokens_len"])
+            total_tokens_len.append(generated[0]["total_tokens_len"])
             if monitor:
                 _, metrics_dict = monitor.end_operation(tokens=total_tokens_len)
 
