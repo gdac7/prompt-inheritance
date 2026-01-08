@@ -318,7 +318,7 @@ def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result,
         output_prompts_len = []
         total_tokens_len = []
 
-        for _ in range(num_prompts):
+        for i in range(num_prompts):
             if monitor:
                 monitor.start_operation(f"{key}_prompt_generation")
             generated = sanitizer.batch_generate(
@@ -329,7 +329,7 @@ def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result,
                 temperature=template.temperature,
                 max_tokens=template.max_tokens,
             )
-            print(f"\nGerado prompt {_} do método {key}\n")
+            print(f"\nGerado prompt {i} do método {key}\n")
             print(generated)
             prompts.append(generated[0]["response"])
             input_prompts_len.append(generated[0]["input_tokens_len"])
@@ -367,7 +367,7 @@ def get_approaches_results(output_dir="results-sbrc/get_approaches_results.json"
     sanitizer = LocalModelTransformers(sanitizer_model_name)
     all_requests_ordered = [item["malicious_request"] for item in data]
     unique_requests_ordered = list(dict.fromkeys(all_requests_ordered))
-    requests = unique_requests_ordered[:3]
+    requests = unique_requests_ordered[:1]
     requests_embeddings = np.array(sentence_model.encode(requests, show_progress_bar=False))
     n = 10
     os.makedirs(os.path.dirname(output_dir), exist_ok=True)
