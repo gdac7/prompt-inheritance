@@ -130,7 +130,7 @@ class LocalModelTransformers():
                 final_responses.append({
                     "response": processed_response,
                     "input_tokens_len": input_length,
-                    "output_tokens_len": output_length,
+                    "output_token_len": output_length,
                     "total_tokens_len": input_length + output_length
                 }
                 )
