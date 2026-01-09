@@ -77,7 +77,6 @@ class LocalModelTransformers():
         final_response = self.wrapper(final_response)
         del inputs
         del output_ids
-        torch.cuda.empty_cache()
         return final_response
     
     def batch_generate_target_responses(self, user_prompts: List[str], system_prompt: str=None, max_tokens: int=4096, temperature: float=0.7, condition: Optional[str] = None):
