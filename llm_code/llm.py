@@ -136,7 +136,6 @@ class LocalModelTransformers():
             
             del inputs
             del output_ids
-            torch.cuda.empty_cache()
             return final_responses
 
 
@@ -194,11 +193,14 @@ class LocalModelTransformers():
                     "total_tokens_len": input_length + output_length
                 }
                 )
-               
+        # End monitoring and get metrics for the entire batch
+        if monitor:
+            total_tokens_len = [g["total_tokens_len"] for g in final_responses]
+            total_tokens_processed = sum(total_tokens_len)
+            _, metrics_dict = monitor.end_operation(tokens=total_tokens_processed)
         del inputs
         del output_ids
-        torch.cuda.empty_cache() 
-        return final_responses
+        return final_responses, metrics_dict
     
         
     

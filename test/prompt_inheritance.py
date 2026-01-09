@@ -320,13 +320,14 @@ def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result,
         if monitor:
             monitor.start_operation(f"{key}_prompt_generation")
 
-        generated = sanitizer.batch_generate_prompts(
+        generated, metrics_dict = sanitizer.batch_generate_prompts(
             user_prompt=template.user_prompt,
             system_prompt=template.system_prompt,
             num_samples=num_prompts,
             condition=template.condition,
             temperature=template.temperature,
             max_tokens=template.max_tokens,
+            monitor=monitor if monitor else None
         )
 
         # Extract data from batch results
@@ -336,11 +337,6 @@ def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result,
         total_tokens_len = [g["total_tokens_len"] for g in generated]
 
         print(f"\nGenerated {len(prompts)} prompts for method {key}\n")
-        # End monitoring and get metrics for the entire batch
-        if monitor:
-            total_tokens_processed = sum(total_tokens_len)
-            _, metrics_dict = monitor.end_operation(tokens=total_tokens_processed)
-
         results_dict[key] = {
                 "malicious_request": malicious_request,
                 "prompts": prompts,
