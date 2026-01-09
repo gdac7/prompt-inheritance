@@ -5,6 +5,8 @@ from typing import List, Dict, Optional
 from perf_metrics.performance_monitor import PerfomanceMonitor
 class LocalModelTransformers():
     def __init__(self, model_name, device: str = "auto"):
+        self.target_generation_count = 0
+        self.prompt_generation_count = 0
         self.model_name = model_name
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.model_name, 
@@ -135,6 +137,9 @@ class LocalModelTransformers():
             
             del inputs
             del output_ids
+            self.target_generation_count += 1
+            if self.target_generation_count % 3 == 0:
+                torch.cuda.empty_cache()
             return final_responses
 
 
@@ -199,6 +204,9 @@ class LocalModelTransformers():
             _, metrics_dict = monitor.end_operation(tokens=total_tokens_processed)
         del inputs
         del output_ids
+        self.prompt_generation_count += 1
+        if self.prompt_generation_count % 3 == 0:
+            torch.cuda.empty_cache()
         return final_responses, metrics_dict
     
         
