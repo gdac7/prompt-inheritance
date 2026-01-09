@@ -5,7 +5,7 @@ class PromptTemplate:
     system_prompt: str
     user_prompt: str
     condition: str
-    temperature: float = 0.7
+    temperature: float = 0.0
     max_tokens: int = 4096
 
 class SanitizerPrompt:
@@ -31,6 +31,6 @@ class SanitizerPrompt:
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             condition=condition,
-            temperature=0.7,
+            temperature=0.0,
             max_tokens=4096
         )

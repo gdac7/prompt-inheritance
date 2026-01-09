@@ -54,11 +54,11 @@ class PerfomanceMonitor:
         memory_used = end_memory - self.start_memory
         if torch.cuda.is_available():
             end_gpu_memory = torch.cuda.memory_allocated() / (1024 ** 2)
-            gpu_memory_used = end_gpu_memory = self.start_gpu_memory
+            gpu_memory_used = end_gpu_memory - self.start_gpu_memory
         else:
             gpu_memory_used = 0.0
-        
-        cpu_percent = self.process.cpu_percent(interval=0.1)
+
+        cpu_percent = self.process.cpu_percent(interval=0.5)
         metric = ComputationalMetrics(
             operation=self.current_operation,
             wall_time=elapsed_time,
@@ -114,7 +114,7 @@ class PerfomanceMonitor:
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         output = {
             'summary': self.get_summary(),
-            'detailed_metrics': [m.to_dict for m in self.metrics],
+            'detailed_metrics': [m.to_dict() for m in self.metrics],
             'total_operations': len(self.metrics),
             'recorded_at': datetime.now().isoformat()
 
