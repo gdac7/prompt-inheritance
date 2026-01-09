@@ -134,7 +134,7 @@ def apply_gradient_weighted(model_name, sim_prompts, malicious_request, target_r
    
     special_tokens = set(tokenizer.all_special_tokens)
     filtered_tokens = []
-    top_k = 50
+    top_k = 30
     atual_k = 0
     for token_id in sorted_candidate_ids:
         decoded_token = tokenizer.decode([token_id], skip_special_tokens=False).strip()
