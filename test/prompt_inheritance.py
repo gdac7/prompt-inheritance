@@ -78,17 +78,17 @@ def iterative_orthogonal_decoding(target_vector, model, k=50,decay=0.5):
     current_vector = target_vector.copy()
     special_tokens = set(tokenizer.all_special_tokens)
     found_tokens_count = 0
-    while found_tokens_count < 50:
+    while found_tokens_count < k:
         sims = cosine_similarity(current_vector, word_embeddings)
         best_idx = np.argmax(sims[0]).item()
         token = tokenizer.convert_ids_to_tokens(best_idx)
 
         if token not in found_tokens and len(token) > 2 and token not in special_tokens and not token.startswith("##"):
             found_tokens.append(token)
+            found_tokens_count += 1
         token_vec = word_embeddings[best_idx].reshape(1, -1)
         scalar_proj = np.dot(current_vector, token_vec.T) / np.dot(token_vec, token_vec.T)
         current_vector = current_vector - (scalar_proj * token_vec * decay)
-        found_tokens_count += 1
     return found_tokens
 
 
@@ -193,7 +193,7 @@ def score_weighted_pca(sentence_model, cluster_embeddings, scores, min_score_thr
 
     alpha = np.sqrt(lambda1)
     c_new  = weighted_centroid + alpha * v1
-    return iterative_orthogonal_decoding(c_new, sentence_model, k=50)
+    return iterative_orthogonal_decoding(c_new, sentence_model, k=30)
     # transformer_model = sentence_model[0]
     # tokenizer = transformer_model.tokenizer
     # word_embedding_matrix = transformer_model.auto_model.get_input_embeddings().weight.detach().cpu().numpy()
@@ -217,7 +217,7 @@ def apply_pca(sentence_model, centered_embeddings, centroid, k=50):
     alpha_scale = np.sqrt(pca.explained_variance_[0])
     alpha = 1.0 * alpha_scale
     c_new = centroid + (alpha * v1)
-    return iterative_orthogonal_decoding(c_new, sentence_model, k=50)
+    return iterative_orthogonal_decoding(c_new, sentence_model, k=30)
     # transformer_model = sentence_model[0]
     # tokenizer = transformer_model.tokenizer
     # word_embedding_matrix = transformer_model.auto_model.get_input_embeddings().weight.detach().cpu().numpy()
@@ -248,7 +248,7 @@ def apply_ica(sentence_model, centered_embeddings, centroid, n_components=5, max
     alpha_scale = np.std(component_scores)
     alpha = 1.0 * alpha_scale
     c_new = centroid + (alpha * v1)
-    return iterative_orthogonal_decoding(c_new, sentence_model, k=50)
+    return iterative_orthogonal_decoding(c_new, sentence_model, k=30)
     ### Getting tokens back
     # transformer_model = sentence_model[0]
     # tokenizer = transformer_model.tokenizer
