@@ -366,7 +366,7 @@ def get_approaches_results(output_dir="results-sbrc/get_approaches_results.json"
     sanitizer = LocalModelTransformers(sanitizer_model_name)
     all_requests_ordered = [item["malicious_request"] for item in data]
     unique_requests_ordered = list(dict.fromkeys(all_requests_ordered))
-    requests = unique_requests_ordered[:1]
+    requests = unique_requests_ordered[:50]
     requests_embeddings = np.array(sentence_model.encode(requests, show_progress_bar=False))
     n = 10
     os.makedirs(os.path.dirname(output_dir), exist_ok=True)
