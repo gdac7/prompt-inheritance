@@ -6,7 +6,7 @@ class PromptTemplate:
     user_prompt: str
     condition: str
     temperature: float = 0.0
-    max_tokens: int = 4096
+    max_tokens: int = 1024
 
 class SanitizerPrompt:
     @staticmethod
