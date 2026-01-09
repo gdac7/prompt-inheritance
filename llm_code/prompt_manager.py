@@ -32,5 +32,5 @@ class SanitizerPrompt:
             user_prompt=user_prompt,
             condition=condition,
             temperature=0.0,
-            max_tokens=4096
+            max_tokens=1024
         )
