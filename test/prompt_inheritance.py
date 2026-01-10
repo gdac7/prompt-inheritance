@@ -298,63 +298,45 @@ def apply_lca_pca(data, top_n, cluster_embeddings, sucess_threshold=8.5, n_compo
     baw_lca_pca = apply_pca(elite_centered_embeddings, centroid)
     return baw_lca_pca, elite_mask
 
-def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result, 
-                    base_prompts, base_scores, score_weighted_pca_result, 
-                    gradient_weighted_result, bot_creation_cost: dict, num_prompts=5, **kwargs) -> Dict[str, Dict[str, any]]:
-    # Chamar o LLM para gerar 5 samples com cada bag of words dos métodos
-    # Nos argumentos
-    # Teremos no final um dicionario com {pca: prompts: List[5 items], scores: List[float], mean_score: float, o mesmo para o resto}
+def get_new_prompts(sanitizer, malicious_request,  base_prompts, base_scores, num_prompts=5, **kwargs) -> Dict[str, Dict[str, any]]:
+   
     monitor = PerfomanceMonitor()
-    bow_map = {
-        "pca": pca_result,
-        "ica": ica_result,
-        "score_weighted_pca": score_weighted_pca_result,
-        "gradient_weighted": gradient_weighted_result,
+    template = SanitizerPrompt.get_sanitizer_prompt(malicious_request)
+    if monitor:
+        monitor.start_operation(f"prompt_generation")
+
+    generated, _ = sanitizer.batch_generate_prompts(
+        user_prompt=template.user_prompt,
+        system_prompt=template.system_prompt,
+        num_samples=num_prompts,
+        condition=template.condition,
+        temperature=template.temperature,
+        max_tokens=template.max_tokens,
+        monitor=monitor if monitor else None
+    )
+
+    # Extract data from batch results
+    prompts = [g["response"] for g in generated]
+    input_prompts_len = [g["input_tokens_len"] for g in generated]
+    output_prompts_len = [g["output_tokens_len"] for g in generated]
+    total_tokens_len = [g["total_tokens_len"] for g in generated]
+
+    print(f"\nGenerated {len(prompts)} prompts for method {key}\n")
+    results_dict =  {
+            "malicious_request": malicious_request,
+            "prompts": prompts,
+            "input_prompts_len": input_prompts_len,
+            "target_responses": [],
+            "output_prompts_len": output_prompts_len,
+            "total_tokens_len": total_tokens_len,
+            "scores": [],
+            "best_prompt": "",
+            "worst_prompt": "",
+            "mean_score": 0.0,
+            "base_prompts": base_prompts,
+            "base_scores": base_scores,
+            "base_mean_score": np.mean(base_scores),
     }
-
-    results_dict = {}
-    for key, bow in bow_map.items():
-        print(f"\nGenerating {num_prompts} prompts for method: {key}\n")
-        template = SanitizerPrompt.get_sanitizer_prompt(malicious_request, bow)
-
-        if monitor:
-            monitor.start_operation(f"{key}_prompt_generation")
-
-        generated, metrics_dict = sanitizer.batch_generate_prompts(
-            user_prompt=template.user_prompt,
-            system_prompt=template.system_prompt,
-            num_samples=num_prompts,
-            condition=template.condition,
-            temperature=template.temperature,
-            max_tokens=template.max_tokens,
-            monitor=monitor if monitor else None
-        )
-
-        # Extract data from batch results
-        prompts = [g["response"] for g in generated]
-        input_prompts_len = [g["input_tokens_len"] for g in generated]
-        output_prompts_len = [g["output_tokens_len"] for g in generated]
-        total_tokens_len = [g["total_tokens_len"] for g in generated]
-
-        print(f"\nGenerated {len(prompts)} prompts for method {key}\n")
-        results_dict[key] = {
-                "malicious_request": malicious_request,
-                "prompts": prompts,
-                "input_prompts_len": input_prompts_len,
-                "target_responses": [],
-                "output_prompts_len": output_prompts_len,
-                "total_tokens_len": total_tokens_len,
-                "scores": [],
-                "best_prompt": "",
-                "worst_prompt": "",
-                "mean_score": 0.0,
-                "base_prompts": base_prompts,
-                "base_scores": base_scores,
-                "base_mean_score": np.mean(base_scores),
-                "BoT": bow,
-                "BoT_creation_cost": bot_creation_cost[key],
-                "prompt_generation_cost": metrics_dict
-        }
     
     return results_dict
     
@@ -372,7 +354,6 @@ def get_approaches_results(output_dir="results-sbrc/get_approaches_results.json"
     os.makedirs(os.path.dirname(output_dir), exist_ok=True)
     all_new_prompts = []
     i = 1
-    bow_cost_dict = {}
     for request in tqdm(requests, desc="Getting approaches results..."):
         cluster_embeddings, sim_requests, sim_prompts, top_n = find_n_similar(
             sentence_model,
@@ -383,38 +364,11 @@ def get_approaches_results(output_dir="results-sbrc/get_approaches_results.json"
             data
         )
         base_prompts, base_scores = get_base_prompts_and_scores(sim_prompts, data)
-        monitor.start_operation("sw_creation_baw_cost")
-        baw_score_weighted_pca = score_weighted_pca(sentence_model, cluster_embeddings, np.array(base_scores), k=50)
-        _, sw_bow_metrics_dict = monitor.end_operation()
-        bow_cost_dict["score_weighted_pca"] = sw_bow_metrics_dict
-        centered_embeddings, centroid = get_centroid(cluster_embeddings)
-        monitor.start_operation("pca_creation_baw_cost")
-        baw_pca = apply_pca(sentence_model, centered_embeddings, centroid)
-        _, pca_bow_metrics_dict = monitor.end_operation()
-        bow_cost_dict["pca"] = pca_bow_metrics_dict
-        monitor.start_operation("ica_creation_baw_cost")
-        baw_ica = apply_ica(sentence_model, centered_embeddings, centroid, n_components=5)
-        _, ica_bow_metrics_dict = monitor.end_operation()
-        bow_cost_dict["ica"] = ica_bow_metrics_dict
-        monitor.start_operation("gw_creation_baw_cost")
-        baw_gw = apply_gradient_weighted(model_name="meta-llama/Llama-3.1-8B-Instruct", sim_prompts=sim_prompts, malicious_request=request)
-        _, gw_bow_metrics_dict = monitor.end_operation()
-        bow_cost_dict["gradient_weighted"] = gw_bow_metrics_dict
-        
         new_prompts = get_new_prompts(
             sanitizer=sanitizer,
-            malicious_request=request,
-            pca_result=baw_pca, 
-            ica_result=baw_ica, 
-            score_weighted_pca_result=baw_score_weighted_pca,
-            gradient_weighted_result=baw_gw,
+            malicious_request=request, 
             base_prompts=base_prompts,
             base_scores=base_scores,
-            baw_swpca=baw_score_weighted_pca,
-            baw_pca=baw_pca,
-            baw_ica=baw_ica,
-            baw_gw=baw_gw,
-            bot_creation_cost=bow_cost_dict
         )
         all_new_prompts.append(new_prompts)
         i += 1
@@ -434,31 +388,30 @@ def get_new_scores(new_prompts, output_dir="results-sbrc/get_new_scores_results.
     attack_generator = ag(None, None, scorer, None)
     target = LocalModelTransformers("meta-llama/Llama-3.1-8B-Instruct")
     for request_results in tqdm(new_prompts, desc="Scoring new prompts"):
-        for method, results in request_results.items():
-            best_score = -1
-            worst_score = 11
-            prompts = results["prompts"]   
-            print(f"\nGenerating {len(prompts)} target responses for {method}...")
-            target_responses = target.batch_generate_target_responses(user_prompts=prompts)  
-            print(f"Finished generating responses. Now scoring...")
-            scores = []
-            for prompt, response in tqdm(zip(prompts, target_responses), desc="Getting score"):
-                score, _ = attack_generator._score_response(results["malicious_request"], prompt, response)
-                if score is None:
-                    continue
-                if score < worst_score:
-                    worst_score = score
-                    worst_prompt = prompt
-                    
-                if score > best_score:
-                    best_score = score
-                    best_prompt = prompt
-                scores.append(score)
-            results["target_responses"] = target_responses
-            results["scores"] = scores
-            results["mean_score"] = sum(scores) / len(scores)
-            results["best_prompt"] = best_prompt
-            results["worst_prompt"] = worst_prompt
+        best_score = -1
+        worst_score = 11
+        prompts = request_results["prompts"]   
+        print(f"\nGenerating {len(prompts)} target responses for {request_results["malicious_request"][:10]}...")
+        target_responses = target.batch_generate_target_responses(user_prompts=prompts)  
+        print(f"Finished generating responses. Now scoring...")
+        scores = []
+        for prompt, response in tqdm(zip(prompts, target_responses), desc="Getting score"):
+            score, _ = attack_generator._score_response(request_results["malicious_request"], prompt, response)
+            if score is None:
+                continue
+            if score < worst_score:
+                worst_score = score
+                worst_prompt = prompt
+                
+            if score > best_score:
+                best_score = score
+                best_prompt = prompt
+            scores.append(score)
+        request_results["target_responses"] = target_responses
+        request_results["scores"] = scores
+        request_results["mean_score"] = sum(scores) / len(scores)
+        request_results["best_prompt"] = best_prompt
+        request_results["worst_prompt"] = worst_prompt
 
     with open(output_dir, "w", encoding="utf-8") as f:
         json.dump(new_prompts, f, ensure_ascii=False, indent=4)
