@@ -545,7 +545,7 @@ def get_simulated_annealing_scores(prompts_list, output_dir="results/simmulated_
 
 if __name__ == "__main__":    
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
-    new_prompts = get_approaches_results()
+    #new_prompts = get_approaches_results()
     with open("results-sbrc/get_approaches_results.json", "r", encoding='utf-8') as f:
         new_prompts = json.load(f)
     
