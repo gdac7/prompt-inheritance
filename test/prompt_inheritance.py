@@ -321,7 +321,7 @@ def get_new_prompts(sanitizer, malicious_request,  base_prompts, base_scores, nu
     output_prompts_len = [g["output_tokens_len"] for g in generated]
     total_tokens_len = [g["total_tokens_len"] for g in generated]
 
-    print(f"\nGenerated {len(prompts)} prompts for method {key}\n")
+    print(f"\nGenerated {len(prompts)}")
     results_dict =  {
             "malicious_request": malicious_request,
             "prompts": prompts,
@@ -391,7 +391,7 @@ def get_new_scores(new_prompts, output_dir="results-sbrc/get_new_scores_results.
         best_score = -1
         worst_score = 11
         prompts = request_results["prompts"]   
-        print(f"\nGenerating {len(prompts)} target responses for {request_results["malicious_request"][:10]}...")
+        print(f"\nGenerating {len(prompts)} target responses for {request_results['malicious_request'][:10]}...")
         target_responses = target.batch_generate_target_responses(user_prompts=prompts)  
         print(f"Finished generating responses. Now scoring...")
         scores = []
