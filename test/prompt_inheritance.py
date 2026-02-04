@@ -576,7 +576,7 @@ def get_neighbor(mutator, curr_prompt, top_k = 5):
 
 
 def get_simulated_annealing_scores(prompts_list, output_dir="results/simmulated_annealing_results_with_score.json"):
-    scorer = RemoteModelAPI("http://localhost:8001/generate_score")
+    scorer = RemoteModelAPI("http://200.20.10.73:8001/generate_score")
     target = LocalModelTransformers("meta-llama/Llama-3.1-8B-Instruct")
     attack_generator = ag(None, None, scorer, None)
     for request in tqdm(prompts_list, desc="Scoring simulated annealing"):
