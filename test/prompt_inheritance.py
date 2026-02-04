@@ -29,6 +29,7 @@ import math
 import time
 import multiprocessing as mp
 from datasets import load_dataset
+import argparse
 
 json_path = "../data/data.json"
 config = load_config("../config/models.yaml")
@@ -365,7 +366,7 @@ def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result,
     return results_dict
     
 
-def get_approaches_results(output_dir="results-sbrc/get_approaches_results.json", monitor=None):
+def get_approaches_results(output_dir="results_100_requests/get_approaches_results.json", monitor=None):
     monitor = PerfomanceMonitor()
     sentence_model = intialize_sentence_transformer()
     data = load_data()
@@ -432,43 +433,43 @@ def get_approaches_results(output_dir="results-sbrc/get_approaches_results.json"
 
     return all_new_prompts
 
-def get_new_scores(new_prompts, output_dir="results-sbrc/get_new_scores_results.json"):
+def get_new_scores(new_prompts, targets: list, output_dir="results_100_requests/get_new_scores_results.json"):
     os.makedirs(os.path.dirname(output_dir), exist_ok=True)
     scorer = RemoteModelAPI("http://localhost:8001/generate_score")
     attack_generator = ag(None, None, scorer, None)
-    target = LocalModelTransformers("meta-llama/Llama-3.1-8B-Instruct")
-    for request_results in tqdm(new_prompts, desc="Scoring new prompts"):
-        for method, results in request_results.items():
-            best_score = -1
-            worst_score = 11
-            prompts = results["prompts"]   
-            print(f"\nGenerating {len(prompts)} target responses for {method}...")
-            target_responses = target.batch_generate_target_responses(user_prompts=prompts)  
-            print(f"Finished generating responses. Now scoring...")
-            scores = []
-            for prompt, response in tqdm(zip(prompts, target_responses), desc="Getting score"):
-                score, _ = attack_generator._score_response(results["malicious_request"], prompt, response)
-                if score is None:
-                    continue
-                if score < worst_score:
-                    worst_score = score
-                    worst_prompt = prompt
-                    
-                if score > best_score:
-                    best_score = score
-                    best_prompt = prompt
-                scores.append(score)
-            results["target_responses"] = target_responses
-            results["scores"] = scores
-            results["mean_score"] = sum(scores) / len(scores)
-            results["best_prompt"] = best_prompt
-            results["worst_prompt"] = worst_prompt
+    for target in targets:
+        for request_results in tqdm(new_prompts, desc="Scoring new prompts"):
+            for method, results in request_results.items():
+                best_score = -1
+                worst_score = 11
+                prompts = results["prompts"]   
+                print(f"\nGenerating {len(prompts)} target responses for {method}...")
+                target_responses = target.batch_generate_target_responses(user_prompts=prompts)  
+                print(f"Finished generating responses. Now scoring...")
+                scores = []
+                for prompt, response in tqdm(zip(prompts, target_responses), desc="Getting score"):
+                    score, _ = attack_generator._score_response(results["malicious_request"], prompt, response)
+                    if score is None:
+                        continue
+                    if score < worst_score:
+                        worst_score = score
+                        worst_prompt = prompt
+                        
+                    if score > best_score:
+                        best_score = score
+                        best_prompt = prompt
+                    scores.append(score)
+                results["target_responses"] = target_responses
+                results["scores"] = scores
+                results["mean_score"] = sum(scores) / len(scores)
+                results["best_prompt"] = best_prompt
+                results["worst_prompt"] = worst_prompt
 
-    with open(output_dir, "w", encoding="utf-8") as f:
-        json.dump(new_prompts, f, ensure_ascii=False, indent=4)
-    del target
-    gc.collect()
-    torch.cuda.empty_cache()
+        with open(output_dir, "w", encoding="utf-8") as f:
+            json.dump(new_prompts, f, ensure_ascii=False, indent=4)
+        del target
+        gc.collect()
+        torch.cuda.empty_cache()
 
     return new_prompts
 
@@ -596,11 +597,20 @@ def get_simulated_annealing_scores(prompts_list, output_dir="results/simmulated_
 
 if __name__ == "__main__":    
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--multipletargets", help="True or false to evaluate in multiple targets", type=bool, default=False)
+    args = parser.parse_args()
+    if args.multipletargets:
+        targets = [
+            "meta-llama/Llama-3.1-8B-Instruct",
+            "meta-llama/Llama-2-7b-chat-hf", 
+            "Qwen/Qwen2-7B-Instruct", 
+            "google/gemma-3-4b-it"
+        ]
+    else:
+        targets = ["meta-llama/Llama-3.1-8B-Instruct"]
     new_prompts = get_approaches_results()
-    with open("results-sbrc/get_approaches_results.json", "r", encoding='utf-8') as f:
-        new_prompts = json.load(f)
-    
-    scored_prompt_list = get_new_scores(new_prompts)
+    scored_prompt_list = get_new_scores(new_prompts, targets=targets)
 
     #simulated_annealing_results = simulated_annealing(scored_prompt_list)
     #simulated_annealing_results_with_score = get_simulated_annealing_scores(simulated_annealing_results)
