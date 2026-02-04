@@ -30,18 +30,23 @@ import time
 import multiprocessing as mp
 from datasets import load_dataset
 
-
+json_path = "../data/data.json"
 config = load_config("../config/models.yaml")
 
 def intialize_sentence_transformer():
     return  SentenceTransformer(config["models"]["embedding"])
 sanitizer_model_name = config["models"]["sanitizer"]
 
-def load_data(size):
+def load_data():
+    with open(json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return data
+
+def load_requests(size):
     ds_standard = load_dataset("walledai/HarmBench", "standard")
     ds_contextual = load_dataset("walledai/HarmBench", "contextual")
-    lifelong_data = list(ds_standard["train"]["prompt"]) + list(ds_contextual["train"]["prompt"])
-    return lifelong_data[:size]
+    data = list(ds_standard["train"]["prompt"]) + list(ds_contextual["train"]["prompt"])
+    return data[:size]
 
 def get_base_prompts_and_scores(sim_prompts, data):
     base_scores = [float(item["score"]) for item in data if item["attack_prompt"] in sim_prompts]
@@ -363,8 +368,9 @@ def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result,
 def get_approaches_results(output_dir="results-sbrc/get_approaches_results.json", monitor=None):
     monitor = PerfomanceMonitor()
     sentence_model = intialize_sentence_transformer()
-    requests = load_data(size=100)
+    data = load_data()
     sanitizer = LocalModelTransformers(sanitizer_model_name)
+    requests = load_requests(size=100)
     requests_embeddings = np.array(sentence_model.encode(requests, show_progress_bar=False))
     n = 10
     os.makedirs(os.path.dirname(output_dir), exist_ok=True)
