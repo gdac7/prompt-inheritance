@@ -437,11 +437,17 @@ def get_new_scores(new_prompts, targets: list, output_dir="results_100_requests/
     os.makedirs(os.path.dirname(output_dir), exist_ok=True)
     scorer = RemoteModelAPI("http://localhost:8001/generate_score")
     attack_generator = ag(None, None, scorer, None)
-    for target in targets:
+    for target_name in targets:
+        target = LocalModelTransformers(target_name)
         for request_results in tqdm(new_prompts, desc="Scoring new prompts"):
             for method, results in request_results.items():
+                if "targets" not in results:
+                    results["targets"] = {}
+                
                 best_score = -1
                 worst_score = 11
+                best_prompt = ""
+                worst_prompt = ""
                 prompts = results["prompts"]   
                 print(f"\nGenerating {len(prompts)} target responses for {method}...")
                 target_responses = target.batch_generate_target_responses(user_prompts=prompts)  
@@ -459,12 +465,15 @@ def get_new_scores(new_prompts, targets: list, output_dir="results_100_requests/
                         best_score = score
                         best_prompt = prompt
                     scores.append(score)
-                results["target_responses"] = target_responses
-                results["scores"] = scores
-                results["mean_score"] = sum(scores) / len(scores)
-                results["best_prompt"] = best_prompt
-                results["worst_prompt"] = worst_prompt
-
+                
+                results["targets"][target_name] = {
+                    "target_responses": target_responses,
+                    "scores": scores,
+                    "mean_score": sum(scores) / len(scores) if scores else 0.0,
+                    "best_prompt": best_prompt,
+                    "worst_prompt": worst_prompt,
+                }
+                
         with open(output_dir, "w", encoding="utf-8") as f:
             json.dump(new_prompts, f, ensure_ascii=False, indent=4)
         del target

@@ -12,15 +12,17 @@ class LocalModelTransformers():
             self.model_name, 
             padding_side="left"
         )
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
         self.model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             device_map=device,
-            torch_dtype=torch.bfloat16,
+            torch_dtype="auto",
+            trust_remote_code=True,
+            #use_flash_attn=True,
+            #attn_implementarion='flash_attention_2',
         )
-        if self.tokenizer.pad_token_id is None:
-            self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
-            self.model.config.pad_token_id = self.model.config.eos_token_id
-
+        
         
 
     def generate(self, user_prompt: str, system_prompt: str = None, max_tokens: int = 4096, temperature: float = 0.7, condition: str = ""):
