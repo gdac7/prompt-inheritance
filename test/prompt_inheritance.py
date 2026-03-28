@@ -36,7 +36,10 @@ config = load_config("../config/models.yaml")
 
 def intialize_sentence_transformer():
     return  SentenceTransformer(config["models"]["embedding"])
-sanitizer_model_name = config["models"]["sanitizer"]
+
+
+SANITIZER_MODEL_NAME = config["models"]["sanitizer"]
+SCORER_ADDRESS = "200.20.10.73"
 
 def load_data():
     with open(json_path, "r", encoding="utf-8") as f:
@@ -305,7 +308,7 @@ def apply_lca_pca(data, top_n, cluster_embeddings, sucess_threshold=8.5, n_compo
     baw_lca_pca = apply_pca(elite_centered_embeddings, centroid)
     return baw_lca_pca, elite_mask
 
-def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result, 
+def     get_new_prompts(sanitizer, malicious_request, pca_result, ica_result, 
                     base_prompts, base_scores, score_weighted_pca_result, 
                     gradient_weighted_result, bot_creation_cost: dict, num_prompts=5, **kwargs) -> Dict[str, Dict[str, any]]:
     # Chamar o LLM para gerar 5 samples com cada bag of words dos métodos
@@ -370,7 +373,7 @@ def get_approaches_results(output_dir="results_100_requests/get_approaches_resul
     monitor = PerfomanceMonitor()
     sentence_model = intialize_sentence_transformer()
     data = load_data()
-    sanitizer = LocalModelTransformers(sanitizer_model_name)
+    sanitizer = LocalModelTransformers(SANITIZER_MODEL_NAME)
     requests = load_requests(size=100)
     requests_embeddings = np.array(sentence_model.encode(requests, show_progress_bar=False))
     n = 10
@@ -435,7 +438,7 @@ def get_approaches_results(output_dir="results_100_requests/get_approaches_resul
 
 def get_new_scores(new_prompts, targets: list, output_dir="results_100_requests/get_new_scores_results.json"):
     os.makedirs(os.path.dirname(output_dir), exist_ok=True)
-    scorer = RemoteModelAPI("http://localhost:8001/generate_score")
+    scorer = RemoteModelAPI(f"http://{SCORER_ADDRESS}:8001/generate_score")
     attack_generator = ag(None, None, scorer, None)
     for target_name in targets:
         target = LocalModelTransformers(target_name)
@@ -474,11 +477,12 @@ def get_new_scores(new_prompts, targets: list, output_dir="results_100_requests/
                     "worst_prompt": worst_prompt,
                 }
                 
-        with open(output_dir, "w", encoding="utf-8") as f:
-            json.dump(new_prompts, f, ensure_ascii=False, indent=4)
         del target
         gc.collect()
         torch.cuda.empty_cache()
+
+    with open(output_dir, "w", encoding="utf-8") as f:
+        json.dump(new_prompts, f, ensure_ascii=False, indent=4)
 
     return new_prompts
 
@@ -607,18 +611,18 @@ def get_simulated_annealing_scores(prompts_list, output_dir="results/simmulated_
 if __name__ == "__main__":    
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     parser = argparse.ArgumentParser()
-    parser.add_argument("--multipletargets", help="True or false to evaluate in multiple targets", type=bool, default=False)
+    parser.add_argument("--multipletargets", help="Flag to evaluate in multiple targets", action="store_true")
     args = parser.parse_args()
     if args.multipletargets:
         targets = [
             "meta-llama/Llama-3.1-8B-Instruct",
-            "meta-llama/Llama-2-7b-chat-hf", 
-            "Qwen/Qwen2-7B-Instruct", 
-            "google/gemma-3-4b-it"
+            "Qwen/Qwen2.5-7B-Instruct",
         ]
     else:
         targets = ["meta-llama/Llama-3.1-8B-Instruct"]
-    new_prompts = get_approaches_results()
+    #new_prompts = get_approaches_results(output_dir="results_100_requests/qwen_get_approaches_results.json")
+    with open("results_100_requests/get_approaches_results.json", "r", encoding="utf-8") as f:
+        new_prompts = json.load(f)
     scored_prompt_list = get_new_scores(new_prompts, targets=targets)
 
     #simulated_annealing_results = simulated_annealing(scored_prompt_list)
