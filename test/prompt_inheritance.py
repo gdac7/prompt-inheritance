@@ -31,7 +31,7 @@ import multiprocessing as mp
 from datasets import load_dataset
 import argparse
 
-json_path = "../data/data.json"
+json_path = "../data/globecom-data.json"
 config = load_config("../config/models.yaml")
 
 def intialize_sentence_transformer():
@@ -39,6 +39,7 @@ def intialize_sentence_transformer():
 
 
 SANITIZER_MODEL_NAME = config["models"]["sanitizer"]
+SCORER_LOCAL_MODEL_NAME = config["models"]["scorer"]
 SCORER_ADDRESS = "200.20.10.73"
 
 def load_data():
@@ -144,7 +145,7 @@ def apply_gradient_weighted(model_name, sim_prompts, malicious_request, target_r
    
     special_tokens = set(tokenizer.all_special_tokens)
     filtered_tokens = []
-    top_k = 30
+    top_k = 50
     atual_k = 0
     for token_id in sorted_candidate_ids:
         decoded_token = tokenizer.decode([token_id], skip_special_tokens=False).strip()
@@ -435,10 +436,10 @@ def get_approaches_results(output_dir="results_100_requests/get_approaches_resul
     torch.cuda.empty_cache()
 
     return all_new_prompts
-
+    
 def get_new_scores(new_prompts, targets: list, output_dir="results_100_requests/get_new_scores_results.json"):
     os.makedirs(os.path.dirname(output_dir), exist_ok=True)
-    scorer = RemoteModelAPI(f"http://{SCORER_ADDRESS}:8001/generate_score")
+    scorer = LocalModelTransformers(SCORER_LOCAL_MODEL_NAME)
     attack_generator = ag(None, None, scorer, None)
     for target_name in targets:
         target = LocalModelTransformers(target_name)
@@ -615,15 +616,15 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.multipletargets:
         targets = [
-            "Qwen/Qwen2.5-7B-Instruct",
+            "meta-llama/Llama-2-7b-chat-hf",
+            "meta-llama/Llama-2-13b-chat-hf",
             "meta-llama/Llama-3.1-8B-Instruct",
+            "Qwen/Qwen2-7B-Instruct", 
+            "Qwen/Qwen2.5-7B-Instruct",
         ]
     else:
         targets = ["meta-llama/Llama-3.1-8B-Instruct"]
-    #new_prompts = get_approaches_results(output_dir="results_100_requests/qwen_get_approaches_results.json")
-    with open("results_100_requests/get_approaches_results.json", "r", encoding="utf-8") as f:
-        new_prompts = json.load(f)
-    scored_prompt_list = get_new_scores(new_prompts, targets=targets)
+    new_prompts = get_approaches_results(output_dir="globecom/globecom_approaches_results.json")
+    scored_prompt_list = get_new_scores(new_prompts, targets=targets, output_dir="globecom/globecom_approaches_results_with_scores.json")
 
-    #simulated_annealing_results = simulated_annealing(scored_prompt_list)
-    #simulated_annealing_results_with_score = get_simulated_annealing_scores(simulated_annealing_results)
+    
