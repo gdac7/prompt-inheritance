@@ -40,6 +40,7 @@ def intialize_sentence_transformer():
 
 SANITIZER_MODEL_NAME = config["models"]["sanitizer"]
 SCORER_ADDRESS = "200.20.10.73"
+LOCAL_SCORER_MODEL = config["models"]["scorer"]
 
 def load_data():
     with open(json_path, "r", encoding="utf-8") as f:
@@ -438,7 +439,7 @@ def get_approaches_results(output_dir="results_100_requests/get_approaches_resul
 
 def get_new_scores(new_prompts, targets: list, output_dir="results_100_requests/get_new_scores_results.json"):
     os.makedirs(os.path.dirname(output_dir), exist_ok=True)
-    scorer = RemoteModelAPI(f"http://{SCORER_ADDRESS}:8001/generate_score")
+    scorer = LocalModelTransformers(SCORER)
     attack_generator = ag(None, None, scorer, None)
     for target_name in targets:
         target = LocalModelTransformers(target_name)
@@ -615,7 +616,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.multipletargets:
         targets = [
-               #"meta-llama/Llama-3.1-8B-Instruct",
+               "meta-llama/Llama-3.1-8B-Instruct",
                "mistralai/Mistral-7B-Instruct-v0.3",
         ]
     else:

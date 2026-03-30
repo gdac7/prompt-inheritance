@@ -3,3 +3,4 @@ models:
   perplexed: "meta-llama/Llama-3.1-8B"
   embedding: "all-MiniLM-L6-v2"
   mask-model: "bert-base-multilingual-cased"
+  scorer: "google/gemma-1.1-7b-it"
