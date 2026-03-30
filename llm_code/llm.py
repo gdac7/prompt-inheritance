@@ -25,7 +25,7 @@ class LocalModelTransformers():
         
         
 
-    def generate(self, user_prompt: str, system_prompt: str = None, max_tokens: int = 4096, temperature: float = 0.7, condition: str = "", function="not specified"):
+    def generate(self, user_prompt: str, system_prompt: str = None, max_tokens: int = 4096, temperature: float = 0.7, condition: str = "", function: str = "not specified"):
         start = datetime.now()
         output_ids = None
         inputs = None
@@ -54,11 +54,6 @@ class LocalModelTransformers():
                 except:
                     plain_text = f"{system_prompt}\n\n{user_prompt}" if system_prompt else user_prompt
                     plain_text += condition
-                    inputs = self.tokenizer.apply_chat_template(
-                        messages,
-                        tokenize=False,
-                        add_generation_prompt=True,
-                    )
                     inputs = self.tokenizer(plain_text, return_tensors="pt")
                     inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
 
@@ -103,7 +98,7 @@ class LocalModelTransformers():
                         messages = [
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": user_prompt}
-                        ]
+                        ] if system_prompt else [{"role": "user", "content": user_prompt}]
                         plain_text = self.tokenizer.apply_chat_template(
                             messages,
                             tokenize=False,
