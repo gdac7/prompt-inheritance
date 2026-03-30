@@ -624,7 +624,9 @@ if __name__ == "__main__":
         ]
     else:
         targets = ["meta-llama/Llama-3.1-8B-Instruct"]
-    new_prompts = get_approaches_results(output_dir="globecom/globecom_approaches_results.json")
+    #new_prompts = get_approaches_results(output_dir="globecom/globecom_approaches_results.json")
+    with open("globecom/globecom_approaches_results.json", "r", encoding="utf-8") as f:
+        new_prompts = json.load(f)
     scored_prompt_list = get_new_scores(new_prompts, targets=targets, output_dir="globecom/globecom_approaches_results_with_scores.json")
 
     
