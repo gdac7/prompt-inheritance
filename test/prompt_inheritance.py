@@ -309,7 +309,7 @@ def apply_lca_pca(data, top_n, cluster_embeddings, sucess_threshold=8.5, n_compo
     baw_lca_pca = apply_pca(elite_centered_embeddings, centroid)
     return baw_lca_pca, elite_mask
 
-def     get_new_prompts(sanitizer, malicious_request, pca_result, ica_result, 
+def get_new_prompts(sanitizer, malicious_request, pca_result, ica_result, 
                     base_prompts, base_scores, score_weighted_pca_result, 
                     gradient_weighted_result, bot_creation_cost: dict, num_prompts=5, **kwargs) -> Dict[str, Dict[str, any]]:
     # Chamar o LLM para gerar 5 samples com cada bag of words dos métodos
@@ -439,9 +439,10 @@ def get_approaches_results(output_dir="results_100_requests/get_approaches_resul
 
 def get_new_scores(new_prompts, targets: list, output_dir="results_100_requests/get_new_scores_results.json"):
     os.makedirs(os.path.dirname(output_dir), exist_ok=True)
-    scorer = LocalModelTransformers(SCORER)
+    scorer = LocalModelTransformers(LOCAL_SCORER_MODEL)
     attack_generator = ag(None, None, scorer, None)
     for target_name in targets:
+        print(f"Initializing with target {target_name}\n")
         target = LocalModelTransformers(target_name)
         for request_results in tqdm(new_prompts, desc="Scoring new prompts"):
             for method, results in request_results.items():
