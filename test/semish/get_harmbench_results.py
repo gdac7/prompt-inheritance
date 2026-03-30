@@ -22,7 +22,11 @@ def get_harmbench_results(paths):
 
 if __name__ == "__main__":
     paths = [
-        "meta-llama-Llama-3.1-8B-Instruct-generations.json",
+        "generations/llama/",
+        "generations/gw/",
+        "generations/ica/",
+        "generations/pca/",
+        "generations/sw/"
     ]
     get_harmbench_results(paths)
 
