@@ -145,7 +145,7 @@ def apply_gradient_weighted(model_name, sim_prompts, malicious_request, target_r
    
     special_tokens = set(tokenizer.all_special_tokens)
     filtered_tokens = []
-    top_k = 50
+    top_k = 30
     atual_k = 0
     for token_id in sorted_candidate_ids:
         decoded_token = tokenizer.decode([token_id], skip_special_tokens=False).strip()
@@ -162,7 +162,7 @@ def apply_gradient_weighted(model_name, sim_prompts, malicious_request, target_r
     del tokenizer
     return filtered_tokens
 
-def score_weighted_pca(sentence_model, cluster_embeddings, scores, min_score_threshold= 7.0, k=50):
+def score_weighted_pca(sentence_model, cluster_embeddings, scores, min_score_threshold= 7.0, k=30):
     if cluster_embeddings.shape[0] != len(scores):
         raise RuntimeError("shape do cluster diferente da quantidade de scores fornecida")
     
@@ -204,7 +204,7 @@ def score_weighted_pca(sentence_model, cluster_embeddings, scores, min_score_thr
 
     alpha = np.sqrt(lambda1)
     c_new  = weighted_centroid + alpha * v1
-    return iterative_orthogonal_decoding(c_new, sentence_model, k=30)
+    return iterative_orthogonal_decoding(c_new, sentence_model, k=k)
     # transformer_model = sentence_model[0]
     # tokenizer = transformer_model.tokenizer
     # word_embedding_matrix = transformer_model.auto_model.get_input_embeddings().weight.detach().cpu().numpy()
@@ -220,7 +220,7 @@ def score_weighted_pca(sentence_model, cluster_embeddings, scores, min_score_thr
     #         bow.append(token)
     # return bow
 
-def apply_pca(sentence_model, centered_embeddings, centroid, k=50):
+def apply_pca(sentence_model, centered_embeddings, centroid, k=30):
     pca = PCA(n_components=1)
     pca.fit(centered_embeddings)
     v1 = pca.components_[0]
@@ -228,7 +228,7 @@ def apply_pca(sentence_model, centered_embeddings, centroid, k=50):
     alpha_scale = np.sqrt(pca.explained_variance_[0])
     alpha = 1.0 * alpha_scale
     c_new = centroid + (alpha * v1)
-    return iterative_orthogonal_decoding(c_new, sentence_model, k=30)
+    return iterative_orthogonal_decoding(c_new, sentence_model, k=k)
     # transformer_model = sentence_model[0]
     # tokenizer = transformer_model.tokenizer
     # word_embedding_matrix = transformer_model.auto_model.get_input_embeddings().weight.detach().cpu().numpy()
@@ -244,7 +244,7 @@ def apply_pca(sentence_model, centered_embeddings, centroid, k=50):
     #         bow.append(token)
     # return bow
 
-def apply_ica(sentence_model, centered_embeddings, centroid, n_components=5, max_iter=1000, tol=1e-3, random_state=42, component_index_to_use=0, k=50):
+def apply_ica(sentence_model, centered_embeddings, centroid, n_components=5, max_iter=1000, tol=1e-3, random_state=42, component_index_to_use=0, k=30):
     ica = FastICA(
         n_components=n_components,
         max_iter=max_iter,
@@ -259,7 +259,7 @@ def apply_ica(sentence_model, centered_embeddings, centroid, n_components=5, max
     alpha_scale = np.std(component_scores)
     alpha = 1.0 * alpha_scale
     c_new = centroid + (alpha * v1)
-    return iterative_orthogonal_decoding(c_new, sentence_model, k=30)
+    return iterative_orthogonal_decoding(c_new, sentence_model, k=k)
     ### Getting tokens back
     # transformer_model = sentence_model[0]
     # tokenizer = transformer_model.tokenizer
@@ -393,16 +393,16 @@ def get_approaches_results(output_dir="results_100_requests/get_approaches_resul
         )
         base_prompts, base_scores = get_base_prompts_and_scores(sim_prompts, data)
         monitor.start_operation("sw_creation_baw_cost")
-        baw_score_weighted_pca = score_weighted_pca(sentence_model, cluster_embeddings, np.array(base_scores), k=50)
+        baw_score_weighted_pca = score_weighted_pca(sentence_model, cluster_embeddings, np.array(base_scores), k=30)
         _, sw_bow_metrics_dict = monitor.end_operation()
         bow_cost_dict["score_weighted_pca"] = sw_bow_metrics_dict
         centered_embeddings, centroid = get_centroid(cluster_embeddings)
         monitor.start_operation("pca_creation_baw_cost")
-        baw_pca = apply_pca(sentence_model, centered_embeddings, centroid)
+        baw_pca = apply_pca(sentence_model, centered_embeddings, centroid, k=30)
         _, pca_bow_metrics_dict = monitor.end_operation()
         bow_cost_dict["pca"] = pca_bow_metrics_dict
         monitor.start_operation("ica_creation_baw_cost")
-        baw_ica = apply_ica(sentence_model, centered_embeddings, centroid, n_components=5)
+        baw_ica = apply_ica(sentence_model, centered_embeddings, centroid, n_components=5, k=30)
         _, ica_bow_metrics_dict = monitor.end_operation()
         bow_cost_dict["ica"] = ica_bow_metrics_dict
         monitor.start_operation("gw_creation_baw_cost")
