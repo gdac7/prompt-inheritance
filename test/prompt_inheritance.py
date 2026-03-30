@@ -616,8 +616,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.multipletargets:
         targets = [
-            "meta-llama/Llama-2-7b-chat-hf",
-            "meta-llama/Llama-2-13b-chat-hf",
+            "mistralai/Mistral-7B-Instruct-v0.3",
             "meta-llama/Llama-3.1-8B-Instruct",
             "Qwen/Qwen2-7B-Instruct", 
             "Qwen/Qwen2.5-7B-Instruct",
