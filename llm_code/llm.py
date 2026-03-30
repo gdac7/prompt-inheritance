@@ -25,7 +25,7 @@ class LocalModelTransformers():
         
         
 
-    def generate(self, user_prompt: str, system_prompt: str = None, max_tokens: int = 4096, temperature: float = 0.7, condition: str = ""):
+    def generate(self, user_prompt: str, system_prompt: str = None, max_tokens: int = 4096, temperature: float = 0.7, condition: str = "", function="not specified"):
         start = datetime.now()
         output_ids = None
         inputs = None
