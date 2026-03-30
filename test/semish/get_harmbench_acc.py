@@ -95,9 +95,9 @@ def get_results(generations_path_list, results_path_list):
                     inputs = [LLAMA2_CLS_PROMPT['prompt'].format(behavior=behavior, generation=g) for g in batch_generations]
                 tokenized_inputs = tokenizer(inputs, return_tensors="pt").to("cuda")
                 with torch.no_grad():
-                    outputs = model.generate(**tokenized_inputs, max_new_tokens=2048, use_cache=True)
+                    outputs = model.generate(**tokenized_inputs, max_length=8196)
                     outputs_cpu = outputs.cpu()
-                    generated_text = tokenizer.batch_decode(outputs_cpu)
+                    generated_text = tokenizer.batch_decode(outputs_cpu, max_tokens=2048)
                     m = re.search(r'Answer:\s*\[/INST\](Yes|No)</s>', generated_text[0], re.IGNORECASE)         
                     classification = m.group(1).lower() if m else None
                
