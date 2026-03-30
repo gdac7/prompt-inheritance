@@ -618,7 +618,7 @@ if __name__ == "__main__":
         targets = [
             "mistralai/Mistral-7B-Instruct-v0.3",
             "meta-llama/Llama-3.1-8B-Instruct",
-            "Qwen/Qwen2-7B-Instruct", 
+            "google/gemma-3-12b-it", 
             "Qwen/Qwen2.5-7B-Instruct",
         ]
     else:
