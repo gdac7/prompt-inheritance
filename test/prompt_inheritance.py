@@ -434,9 +434,9 @@ def get_approaches_results(output_dir="results_100_requests/get_approaches_resul
     del sanitizer
     gc.collect()
     torch.cuda.empty_cache()
-
-    return all_new_prompts
     
+    return all_new_prompts
+
 def get_new_scores(new_prompts, targets: list, output_dir="results_100_requests/get_new_scores_results.json"):
     os.makedirs(os.path.dirname(output_dir), exist_ok=True)
     scorer = LocalModelTransformers(SCORER_LOCAL_MODEL_NAME)
