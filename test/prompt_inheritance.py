@@ -481,10 +481,10 @@ def get_new_scores(new_prompts, targets: list, output_dir="results_100_requests/
         gc.collect()
         torch.cuda.empty_cache()
 
-    with open(output_dir, "w", encoding="utf-8") as f:
-        json.dump(new_prompts, f, ensure_ascii=False, indent=4)
+        with open(output_dir, "w", encoding="utf-8") as f:
+            json.dump(new_prompts, f, ensure_ascii=False, indent=4)
 
-    return new_prompts
+        return new_prompts
 
 
 #### Simulated Annealing
@@ -615,8 +615,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.multipletargets:
         targets = [
-            "Qwen/Qwen2.5-7B-Instruct",
-            "meta-llama/Llama-3.1-8B-Instruct",
+               #"meta-llama/Llama-3.1-8B-Instruct",
+               "mistralai/Mistral-7B-Instruct-v0.3",
         ]
     else:
         targets = ["meta-llama/Llama-3.1-8B-Instruct"]
