@@ -484,7 +484,7 @@ def get_new_scores(new_prompts, targets: list, output_dir="results_100_requests/
         with open(output_dir, "w", encoding="utf-8") as f:
             json.dump(new_prompts, f, ensure_ascii=False, indent=4)
 
-        return new_prompts
+    return new_prompts
 
 
 #### Simulated Annealing
