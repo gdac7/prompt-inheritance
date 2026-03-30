@@ -442,6 +442,7 @@ def get_new_scores(new_prompts, targets: list, output_dir="results_100_requests/
     scorer = LocalModelTransformers(SCORER_LOCAL_MODEL_NAME)
     attack_generator = ag(None, None, scorer, None)
     for target_name in targets:
+        print(f"Initializing for {target_name}\n")
         target = LocalModelTransformers(target_name)
         for request_results in tqdm(new_prompts, desc="Scoring new prompts"):
             for method, results in request_results.items():
@@ -482,8 +483,8 @@ def get_new_scores(new_prompts, targets: list, output_dir="results_100_requests/
         gc.collect()
         torch.cuda.empty_cache()
 
-    with open(output_dir, "w", encoding="utf-8") as f:
-        json.dump(new_prompts, f, ensure_ascii=False, indent=4)
+        with open(output_dir, "w", encoding="utf-8") as f:
+            json.dump(new_prompts, f, ensure_ascii=False, indent=4)
 
     return new_prompts
 
