@@ -617,15 +617,15 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.multipletargets:
         targets = [
-            "mistralai/Mistral-7B-Instruct-v0.3",
-            "meta-llama/Llama-3.1-8B-Instruct",
-            "google/gemma-3-12b-it", 
+            #"mistralai/Mistral-7B-Instruct-v0.3",
             "Qwen/Qwen2.5-7B-Instruct",
+            "google/gemma-3-12b-it",
+            "meta-llama/Llama-3.1-8B-Instruct",
         ]
     else:
         targets = ["meta-llama/Llama-3.1-8B-Instruct"]
     #new_prompts = get_approaches_results(output_dir="globecom/globecom_approaches_results.json")
-    with open("globecom/globecom_approaches_results.json", "r", encoding="utf-8") as f:
+    with open("globecom/globecom_approaches_results_with_scores.json", "r", encoding="utf-8") as f:
         new_prompts = json.load(f)
     scored_prompt_list = get_new_scores(new_prompts, targets=targets, output_dir="globecom/globecom_approaches_results_with_scores.json")
 
