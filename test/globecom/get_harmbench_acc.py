@@ -96,7 +96,7 @@ def get_model_classifications(tokenizer, model, behavior, generations):
         inp = LLAMA2_CLS_PROMPT['prompt'].format(behavior=behavior, generation=generation)
         tokenized = tokenizer(inp, return_tensors="pt").to("cuda")
         with torch.no_grad():
-            output = model.generate(**tokenized, max_new_tokens=16)
+            output = model.generate(**tokenized, max_new_tokens=8192)
         text = tokenizer.decode(output[0], skip_special_tokens=False)
         m = re.search(r'Answer:\s*\[/INST\]\s*(Yes|No)', text, re.IGNORECASE)
         classification = m.group(1).lower() if m else None
