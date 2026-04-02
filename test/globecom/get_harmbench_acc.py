@@ -99,7 +99,9 @@ def get_model_classifications(tokenizer, model, behavior, generations):
             output = model.generate(**tokenized, max_new_tokens=16)
         text = tokenizer.decode(output[0], skip_special_tokens=False)
         m = re.search(r'Answer:\s*\[/INST\]\s*(Yes|No)', text, re.IGNORECASE)
-        classifications.append(m.group(1).lower() if m else None)
+        classification = m.group(1).lower() if m else None
+        print(classification)
+        classifications.append(classification)
     return classifications
 
 
