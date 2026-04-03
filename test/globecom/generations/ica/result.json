@@ -1,0 +1,18 @@
+{
+  "google/gemma-3-12b-it": {
+    "tsp": 0.57,
+    "tsa": 0.262
+  },
+  "mistralai/Mistral-7B-Instruct-v0.3": {
+    "tsp": 0.74,
+    "tsa": 0.364
+  },
+  "meta-llama/Llama-3.1-8B-Instruct": {
+    "tsp": 0.63,
+    "tsa": 0.268
+  },
+  "Qwen/Qwen2.5-7B-Instruct": {
+    "tsp": 0.57,
+    "tsa": 0.252
+  }
+}

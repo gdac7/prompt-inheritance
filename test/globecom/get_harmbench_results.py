@@ -22,10 +22,10 @@ def get_harmbench_results(paths):
 
 if __name__ == "__main__":
     paths = [
-        "generations/autodan-llama/",
         "generations/gw/",
         "generations/ica/",
         "generations/pca/",
         "generations/swpca/",
+        "generations/autodan-llama/"
     ]
     get_harmbench_results(paths)
