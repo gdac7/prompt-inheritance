@@ -610,23 +610,33 @@ def get_simulated_annealing_scores(prompts_list, output_dir="results/simmulated_
 
     
 
-if __name__ == "__main__":    
+if __name__ == "__main__":
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     parser = argparse.ArgumentParser()
     parser.add_argument("--multipletargets", help="Flag to evaluate in multiple targets", action="store_true")
     args = parser.parse_args()
     if args.multipletargets:
         targets = [
-            #"mistralai/Mistral-7B-Instruct-v0.3",
+            "mistralai/Mistral-7B-Instruct-v0.3",
             "Qwen/Qwen2.5-7B-Instruct",
             "google/gemma-3-12b-it",
             "meta-llama/Llama-3.1-8B-Instruct",
         ]
     else:
         targets = ["meta-llama/Llama-3.1-8B-Instruct"]
-    #new_prompts = get_approaches_results(output_dir="globecom/globecom_approaches_results.json")
-    with open("globecom/globecom_approaches_results_with_scores.json", "r", encoding="utf-8") as f:
-        new_prompts = json.load(f)
-    scored_prompt_list = get_new_scores(new_prompts, targets=targets, output_dir="globecom/globecom_approaches_results_with_scores.json")
+
+    executions_base = "globecom/executions"
+    existing = [
+        int(d) for d in os.listdir(executions_base)
+        if os.path.isdir(os.path.join(executions_base, d)) and d.isdigit()
+    ] if os.path.isdir(executions_base) else []
+    next_execution = max(existing, default=0) + 1
+    execution_dir = os.path.join(executions_base, str(next_execution))
+    os.makedirs(execution_dir, exist_ok=True)
+    print(f"Saving results to execution {next_execution}: {execution_dir}")
+
+    new_prompts = get_approaches_results(output_dir=os.path.join(execution_dir, "globecom_approaches_results.json"))
+
+    scored_prompt_list = get_new_scores(new_prompts, targets=targets, output_dir=os.path.join(execution_dir, "globecom_approaches_results_with_scores.json"))
 
     
