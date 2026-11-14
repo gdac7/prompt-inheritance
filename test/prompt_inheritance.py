@@ -39,7 +39,7 @@ def intialize_sentence_transformer():
 
 
 SANITIZER_MODEL_NAME = config["models"]["sanitizer"]
-SCORER_ADDRESS = "200.20.10.73"
+SCORER_ADDRESS = os.environ.get("SCORER_ADDRESS", "200.20.10.73")
 
 def load_data():
     with open(json_path, "r", encoding="utf-8") as f:
