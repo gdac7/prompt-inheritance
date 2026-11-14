@@ -3,11 +3,12 @@ services:
     build: .
     image: prompt-inheritance:latest
     user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
-    # rede do host: o juiz remoto (SCORER_ADDRESS) precisa estar acessível como no host
+    # rede do host: o juiz (serviço judge ou SCORER_ADDRESS) fica acessível como no host
     network_mode: host
     ipc: host
     environment:
       - HF_TOKEN=${HF_TOKEN:-}
+      - SCORER_ADDRESS=${SCORER_ADDRESS:-127.0.0.1}
     volumes:
       - .:/workspace/prompt-inheritance
       - ${HF_CACHE:-~/.cache/huggingface}:/hf-cache
@@ -18,6 +19,38 @@ services:
       resources:
         reservations:
           devices:
+            # duas GPUs, como na medição de custo do artigo
             - driver: nvidia
-              count: all
+              device_ids: ["${GPU_0:-0}", "${GPU_1:-1}"]
+              capabilities: [gpu]
+
+  # Juiz (Gemma-7B) com o PerfomanceMonitor; ao parar (docker compose stop judge),
+  # grava test/results_judge/scorer_performance_metrics.json com a VRAM do scorer
+  judge:
+    image: prompt-inheritance:latest
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    network_mode: host
+    ipc: host
+    environment:
+      - HF_TOKEN=${HF_TOKEN:-}
+    volumes:
+      - ${HF_CACHE:-~/.cache/huggingface}:/hf-cache
+      - ./test/results_judge:/workspace/autodan-scorer/server_metrics
+    working_dir: /workspace/autodan-scorer
+    # 127.0.0.1: com a rede do host, 0.0.0.0 exporia o juiz para fora da máquina
+    command: uvicorn server.server_llm:app --host 127.0.0.1 --port 8001
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/docs')"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      # o primeiro start baixa o Gemma (~17 GB)
+      start_period: 60m
+    stop_grace_period: 10m
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["${JUDGE_GPU:-2}"]
               capabilities: [gpu]
