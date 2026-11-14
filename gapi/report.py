@@ -16,6 +16,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy import stats
 from scipy.stats import spearmanr
 from sentence_transformers import SentenceTransformer
 from sklearn.decomposition import PCA
@@ -43,6 +44,12 @@ PHASE_LABELS = {
     "prompt_generation_cost": "Sanitização",
     "evaluation": "Avaliação",
 }
+# Medições do AutoDAN-Turbo usadas no artigo (VRAM = média das 3 operações de ataque + scorer)
+AUTODAN_METRICS = os.path.join(REPO_ROOT, "test", "results-sbrc", "autodan_metrics_completo.json")
+AUTODAN_ATTACK_OPERATIONS = [
+    "attacker_initial_prompt_generation", "attacker_strategy_guided_generation", "summarizer_strategy_extraction",
+]
+SCORER_OPERATION = "scorer_generation"
 # Consultas durante a geração das abordagens não executadas aqui (README do GAPI, seção 3.2)
 REFERENCE_QUERIES = {
     "pca": ("0", "0", "5"),
@@ -211,6 +218,122 @@ def cost_metrics(entries, kind, monitor_path):
         "time_per_prompt_s": time_per_request / NUM_PROMPTS if time_per_request is not None else None,
         "peak_vram_mb": max(peaks) if peaks else None,
     }
+
+
+def average_reserved_vram(metrics):
+    """VRAM média reservada de uma operação, somada entre as GPUs (métrica de VRAM do artigo).
+
+    Args:
+        metrics: dict de ComputationalMetrics.to_dict() com snapshots por GPU, ou None.
+
+    Returns:
+        VRAM em MB, ou None sem snapshots.
+    """
+    gpus = (metrics or {}).get("gpu_metrics") or {}
+    means = [np.mean([s["memory_reserved_mb"] for s in gpu["snapshots"]]) for gpu in gpus.values() if gpu.get("snapshots")]
+    return float(sum(means)) if means else None
+
+
+def mean_ci95(values):
+    """Média e margem do intervalo de confiança de 95% (t-Student), como no plots.ipynb do artigo.
+
+    Args:
+        values: amostras (None é ignorado).
+
+    Returns:
+        Tupla (média, margem, n); (None, None, 0) sem amostras.
+    """
+    values = [value for value in values if value is not None]
+    if not values:
+        return None, None, 0
+    margin = float(stats.sem(values) * stats.t.ppf(0.975, len(values) - 1)) if len(values) > 1 else 0.0
+    return float(np.mean(values)), margin, len(values)
+
+
+def article_cost(entries):
+    """Custo como no artigo: VRAM média reservada e tempo por prompt na geração do prompt final.
+
+    A fase é a sanitização (PI e GAPI-S); no GAPI-L, que não tem sanitização, é a evolução.
+
+    Args:
+        entries: resultados do método, um por pedido (todas as sementes).
+
+    Returns:
+        Dict com phase, vram e time_per_prompt, estes como (média, margem IC 95%, n).
+    """
+    phase = "prompt_generation_cost" if any(entry.get("prompt_generation_cost") for entry in entries) else "evolution_cost"
+    phase_metrics = [entry.get(phase) for entry in entries if entry.get(phase)]
+    return {
+        "phase": phase,
+        "vram": mean_ci95([average_reserved_vram(metrics) for metrics in phase_metrics]),
+        "time_per_prompt": mean_ci95([metrics["wall_time_seconds"] / NUM_PROMPTS for metrics in phase_metrics]),
+    }
+
+
+def operation_vram(detailed_metrics, operation):
+    """VRAM média reservada por chamada de uma operação de um arquivo do PerfomanceMonitor.
+
+    Args:
+        detailed_metrics: lista "detailed_metrics" do arquivo.
+        operation: nome da operação.
+
+    Returns:
+        Tupla (média, margem IC 95%, n).
+    """
+    return mean_ci95([average_reserved_vram(m) for m in detailed_metrics if m["operation"] == operation])
+
+
+def autodan_article_vram():
+    """VRAM do AutoDAN-Turbo como no artigo: média das 3 operações de ataque e sumarização + scorer.
+
+    Returns:
+        Tupla (VRAM em MB, margem do IC de 95% propagada como no plots.ipynb), ou None sem o arquivo.
+    """
+    if not os.path.exists(AUTODAN_METRICS):
+        return None
+    detailed = load_json(AUTODAN_METRICS)["detailed_metrics"]
+    attack = [[average_reserved_vram(m) for m in detailed if m["operation"] == op] for op in AUTODAN_ATTACK_OPERATIONS]
+    scorer = [average_reserved_vram(m) for m in detailed if m["operation"] == SCORER_OPERATION]
+    vram = sum(np.mean(values) for values in attack) / len(attack) + np.mean(scorer)
+    variance = sum(stats.sem(values) ** 2 for values in attack) / len(attack) ** 2 + stats.sem(scorer) ** 2
+    return float(vram), float(1.96 * np.sqrt(variance))
+
+
+def article_cost_rows(runs, judge_metrics_path):
+    """Linhas da tabela de custo no formato do artigo (métodos, AutoDAN-Turbo e juiz).
+
+    Args:
+        runs: dict método -> lista de execuções.
+        judge_metrics_path: scorer_performance_metrics.json do serviço judge.
+
+    Returns:
+        Lista de linhas [método, fase, VRAM, tempo por prompt, n].
+    """
+    rows = []
+    for method, method_runs in runs.items():
+        cost = article_cost([entry for run in method_runs for entry in run["entries"]])
+        rows.append([method, PHASE_LABELS[cost["phase"]], fmt_ci(cost["vram"], 0), fmt_ci(cost["time_per_prompt"], 2), cost["vram"][2]])
+    autodan = autodan_article_vram()
+    if autodan:
+        rows.append(["autodan_turbo (artigo)", "ataque + scorer", f"{autodan[0]:.0f} ± {autodan[1]:.0f}", "—", "—"])
+    if os.path.exists(judge_metrics_path):
+        scorer = operation_vram(load_json(judge_metrics_path)["detailed_metrics"], SCORER_OPERATION)
+        rows.append(["juiz Gemma-7B (scorer, medido)", "avaliação", fmt_ci(scorer, 0), "—", scorer[2]])
+    return rows
+
+
+def fmt_ci(stat, digits):
+    """Formata (média, margem, n) como "média ± margem".
+
+    Args:
+        stat: tupla de mean_ci95.
+        digits: casas decimais.
+
+    Returns:
+        Texto da célula.
+    """
+    mean, margin, _ = stat
+    return "—" if mean is None else f"{mean:.{digits}f} ± {margin:.{digits}f}"
 
 
 def mean_pairwise_distance(embeddings):
@@ -512,13 +635,14 @@ def fitness_validation_section(gapi_dir):
     return [f"## Validade da fitness (k = {validation['k']})", "", markdown_table(["Validação", "Spearman ρ", "p", "MAE"], rows), ""]
 
 
-def build_markdown(summary, runs, gapi_dir):
+def build_markdown(summary, runs, gapi_dir, article_rows):
     """Monta o relatório em Markdown com as tabelas para o artigo.
 
     Args:
         summary: dict método -> métrica -> agregado.
         runs: dict método -> lista de execuções.
         gapi_dir: pasta de resultados do GAPI.
+        article_rows: linhas de article_cost_rows.
 
     Returns:
         Texto do relatório.
@@ -537,7 +661,12 @@ def build_markdown(summary, runs, gapi_dir):
         ["Método", "Tempo por pedido (s)", "Tempo por prompt (s)", "Pico de VRAM (MB)"],
         [[m, fmt(summary[m].get("time_per_request_s"), 2), fmt(summary[m].get("time_per_prompt_s"), 2),
           fmt(summary[m].get("peak_vram_mb"), 0)] for m in methods],
-    ), "", "Os custos do PI vêm dos resultados antigos e foram medidos em outro hardware (coluna GPUs abaixo).", ""]
+    ), "", "Os custos de geração do PI vêm do JSON de gerações e foram medidos em outro hardware (coluna GPUs abaixo).", ""]
+
+    lines += ["### Custo como no artigo (média ± IC 95% sobre os pedidos; sementes agregadas)", "", markdown_table(
+        ["Método", "Fase", "VRAM média reservada (MB)", "Tempo por prompt (s)", "n"], article_rows),
+        "", "VRAM: média da memória reservada (snapshots a cada 0,1 s) somada entre as GPUs. O scorer não entra "
+        "no PI nem no GAPI, que não consultam o juiz na geração; no AutoDAN-Turbo ele faz parte do laço.", ""]
 
     phase_rows = []
     for m in methods:
@@ -574,7 +703,7 @@ def build_markdown(summary, runs, gapi_dir):
 
 
 def collect_runs(args):
-    """Carrega as execuções do GAPI e, se informados, os resultados antigos do PI.
+    """Carrega as execuções do GAPI e, se informados, os resultados do PI.
 
     Args:
         args: argumentos da linha de comando.
@@ -614,10 +743,12 @@ def parse_args():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--gapi_dir", default="results_gapi", help="Saídas do GAPI (*_scores.json, *_monitor.json)")
     parser.add_argument("--harmbench_dir", default=None, help="Saída do harmbench_eval.py (padrão: <gapi_dir>/harmbench)")
-    parser.add_argument("--pi_results", default=None, help="Resultados antigos do PI pontuados (formato de get_new_scores)")
+    parser.add_argument("--pi_results", default=None, help="Resultados do PI pontuados (formato de get_new_scores)")
     parser.add_argument("--pi_classifications", default=None, help="Pasta com pca/ica/swpca_classifications.json do PI")
     parser.add_argument("--pi_methods", nargs="+", default=PI_METHODS, help="Métodos do PI a comparar")
     parser.add_argument("--target", default=DEFAULT_TARGET, help="Modelo alvo")
+    parser.add_argument("--judge_metrics", default="results_judge/scorer_performance_metrics.json",
+                        help="Métricas do serviço judge (VRAM do scorer)")
     parser.add_argument("--output_dir", default="results_gapi/report", help="Pasta do relatório")
     return parser.parse_args()
 
@@ -636,7 +767,7 @@ def main():
     with open(os.path.join(args.output_dir, "report.json"), "w", encoding="utf-8") as f:
         json.dump({"target": args.target, "runs": runs_metrics, "summary": summary}, f, ensure_ascii=False, indent=4)
     with open(os.path.join(args.output_dir, "report.md"), "w", encoding="utf-8") as f:
-        f.write(build_markdown(summary, runs, args.gapi_dir))
+        f.write(build_markdown(summary, runs, args.gapi_dir, article_cost_rows(runs, args.judge_metrics)))
     plot_convergence(runs, args.output_dir)
     plot_judge_scores(runs, args.target, args.output_dir)
     plot_projection(runs, args.output_dir)
