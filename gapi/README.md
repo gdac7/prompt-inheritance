@@ -28,7 +28,13 @@ Decisões além do README do projeto:
 - Os 5 indivíduos finais são os melhores **distintos entre todos os avaliados** (hall of fame), não só os da última população.
 - No GAPI-L, uma passada final garante o pedido atual em cada um dos 5 indivíduos finais.
 
+## Custo como no artigo
+
+Além do pico de memória por fase, o `report.py` reproduz a métrica de custo do artigo (`test/results-sbrc/plots.ipynb`): VRAM média **reservada** (snapshots a cada 0,1 s, somada entre as GPUs) e tempo por prompt na fase que gera o prompt final, com IC de 95% sobre os pedidos. Essa fase é a sanitização no PI e no GAPI-S e a evolução no GAPI-L. A tabela inclui o AutoDAN-Turbo, recalculado com a fórmula do artigo a partir de `test/results-sbrc/` (36.891 MB = ataque + scorer), e a VRAM do juiz medida pelo serviço `judge` (`test/results_judge/scorer_performance_metrics.json`, gravado em `docker compose stop judge`). Para comparar com o artigo, rode com 2 GPUs (`GPU_0`/`GPU_1` no `.env`), como na medição original.
+
 ## Execução (de dentro de `test/`, no container)
+
+Pontuar prompts exige o juiz no ar: `docker compose up -d --wait judge` (o serviço `gapi` já sobe o juiz sozinho).
 
 ```bash
 python ../gapi/validate_fitness.py --data ../data/data.json --k 10
