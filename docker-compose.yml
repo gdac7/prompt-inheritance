@@ -1,0 +1,23 @@
+services:
+  pi:
+    build: .
+    image: prompt-inheritance:latest
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    # rede do host: o juiz remoto (SCORER_ADDRESS) precisa estar acessível como no host
+    network_mode: host
+    ipc: host
+    environment:
+      - HF_TOKEN=${HF_TOKEN:-}
+    volumes:
+      - .:/workspace/prompt-inheritance
+      - ${HF_CACHE:-~/.cache/huggingface}:/hf-cache
+    working_dir: /workspace/prompt-inheritance/test
+    stdin_open: true
+    tty: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
