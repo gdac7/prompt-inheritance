@@ -55,11 +55,14 @@ services:
               device_ids: ["${JUDGE_GPU:-2}"]
               capabilities: [gpu]
 
-  # Protocolo completo do GAPI (test/run_gapi_experiments.sh); PI_RESULTS e PI_CLASSIFICATIONS
-  # apontam, a partir de test/, para os resultados antigos do PI usados na comparação
+  # Protocolo completo do GAPI (test/run_gapi_experiments.sh); sobe o juiz e espera ele ficar pronto.
+  # PI_RESULTS e PI_CLASSIFICATIONS apontam, a partir de test/, para o PI pontuado usado na comparação
   gapi:
     extends: pi
     command: bash run_gapi_experiments.sh
+    depends_on:
+      judge:
+        condition: service_healthy
     environment:
       - PI_RESULTS=${PI_RESULTS:-}
       - PI_CLASSIFICATIONS=${PI_CLASSIFICATIONS:-}

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Protocolo completo do GAPI (rodar de test/, dentro do container).
 # Execuções com *_scores.json já existente são puladas, então o script pode ser retomado.
-# Opcional: PI_RESULTS e PI_CLASSIFICATIONS (caminhos a partir de test/) para comparar com o PI antigo.
+# Opcional: PI_RESULTS e PI_CLASSIFICATIONS (caminhos a partir de test/) para comparar com o PI.
 set -euo pipefail
 
 SEEDS="${SEEDS:-0 1 2}"
