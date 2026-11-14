@@ -5,7 +5,9 @@ sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..")))
 
 from src.api_models.remote_model import RemoteModelAPI
 from src.core.attack_generator import AttackGenerator as ag
-from llm_code.prompt_manager import SanitizerPrompt
+from llm_code.prompt_manager import SanitizerPrompt, GAPISanitizerPrompt
+from gapi.knn_fitness import KnnFitness
+from gapi.genetic_prompt import GAConfig, PromptEvolution, join_sentences
 from perf_metrics.performance_monitor import PerfomanceMonitor 
 from utils import calc_perplexity
 import json
@@ -30,6 +32,7 @@ import time
 import multiprocessing as mp
 from datasets import load_dataset
 import argparse
+from dataclasses import asdict
 
 json_path = "../data/data.json"
 config = load_config("../config/models.yaml")
@@ -598,20 +601,212 @@ def get_simulated_annealing_scores(prompts_list, output_dir="results/simmulated_
     return prompts_list
 
 
-            
+#### GAPI (Genetic Algorithm Prompt Inheritance)
+def gapi_method_name(args):
+    """Nome do método GAPI, usado como chave nos resultados e no nome dos arquivos.
+
+    Args:
+        args: argumentos da linha de comando (approach, gapi_mode, lambda_rel, lambda_nov).
+
+    Returns:
+        Nome como gapi_s_top5, gapi_s_top1x5, gapi_l, gapi_l_norel ou gapi_l_nonov.
+    """
+    name = f"{args.approach}_{args.gapi_mode}" if args.approach == "gapi_s" else args.approach
+    if args.lambda_rel == 0:
+        name += "_norel"
+    if args.lambda_nov == 0:
+        name += "_nonov"
+    return name
 
 
+def evolve_request(fitness, malicious_request, sim_prompts, config, rng, approach, monitor):
+    """Roda o GA para um pedido, medindo a fase gapi_evolution.
 
-    
-        
+    Args:
+        fitness: KnnFitness.
+        malicious_request: pedido atual.
+        sim_prompts: prompts similares (população inicial).
+        config: GAConfig.
+        rng: random.Random da execução.
+        approach: "gapi_s" ou "gapi_l" (o GAPI-L insere o pedido atual).
+        monitor: PerfomanceMonitor.
+
+    Returns:
+        Tupla (EvolutionResult, indivíduos finais, métricas da fase).
+    """
+    monitor.start_operation("gapi_evolution")
+    evolution = PromptEvolution(fitness, malicious_request, sim_prompts, config, rng, insert_request=approach == "gapi_l")
+    result = evolution.run()
+    individuals = evolution.with_request(result.individuals) if approach == "gapi_l" else result.individuals
+    _, evolution_cost = monitor.end_operation()
+    return result, individuals, evolution_cost
 
 
-    
+def sanitize_individuals(sanitizer, malicious_request, individuals, gapi_mode, monitor):
+    """Reescreve os indivíduos evoluídos com o sanitizador (GAPI-S), medindo a fase gapi_sanitization.
 
-if __name__ == "__main__":    
+    Args:
+        sanitizer: LocalModelTransformers do sanitizador.
+        malicious_request: pedido atual.
+        individuals: melhores indivíduos (tuplas de sentenças), do melhor para o pior.
+        gapi_mode: "top5" (um prompt por indivíduo) ou "top1x5" (amostras do melhor indivíduo).
+        monitor: PerfomanceMonitor.
+
+    Returns:
+        Tupla (lista de dicts com "response" e tamanhos em tokens, métricas da fase).
+    """
+    monitor.start_operation("gapi_sanitization")
+    if gapi_mode == "top1x5":
+        template = GAPISanitizerPrompt.get_sanitizer_prompt(malicious_request, list(individuals[0]))
+        return sanitizer.batch_generate_prompts(
+            user_prompt=template.user_prompt,
+            system_prompt=template.system_prompt,
+            num_samples=len(individuals),
+            condition=template.condition,
+            temperature=template.temperature,
+            max_tokens=template.max_tokens,
+            monitor=monitor
+        )
+    templates = [GAPISanitizerPrompt.get_sanitizer_prompt(malicious_request, list(ind)) for ind in individuals]
+    return sanitizer.batch_generate_from_templates(templates, monitor=monitor)
+
+
+def build_gapi_entry(args, config, fitness, malicious_request, base_prompts, base_scores,
+                     individuals, result, generated, evolution_cost, generation_cost):
+    """Monta o resultado de um pedido no formato do PI, acrescido dos campos do GAPI.
+
+    Args:
+        args: argumentos da linha de comando.
+        config: GAConfig.
+        fitness: KnnFitness.
+        malicious_request: pedido atual.
+        base_prompts: prompts similares recuperados.
+        base_scores: notas dos prompts similares.
+        individuals: indivíduos finais (tuplas de sentenças).
+        result: EvolutionResult.
+        generated: saídas do sanitizador (GAPI-S) ou lista vazia (GAPI-L).
+        evolution_cost: métricas da fase gapi_evolution.
+        generation_cost: métricas da fase gapi_sanitization, ou None.
+
+    Returns:
+        Dict compatível com get_new_scores.
+    """
+    individual_texts = [join_sentences(individual) for individual in individuals]
+    prompts = [g["response"] for g in generated] if generated else individual_texts
+    request_embedding = fitness.encode([malicious_request])[0]
+    drift = []
+    if generated:
+        sources = individual_texts if args.gapi_mode == "top5" else individual_texts[:1] * len(prompts)
+        drift = (fitness.encode(sources) * fitness.encode(prompts)).sum(axis=1).tolist()
+    return {
+        "malicious_request": malicious_request,
+        "prompts": prompts,
+        "input_prompts_len": [g["input_tokens_len"] for g in generated],
+        "target_responses": [],
+        "output_prompts_len": [g["output_tokens_len"] for g in generated],
+        "total_tokens_len": [g["total_tokens_len"] for g in generated],
+        "scores": [],
+        "best_prompt": "",
+        "worst_prompt": "",
+        "mean_score": 0.0,
+        "base_prompts": base_prompts,
+        "base_scores": base_scores,
+        "base_mean_score": np.mean(base_scores),
+        "individuals": individual_texts,
+        "individual_fitness": [t.to_dict() for t in fitness.evaluate(individual_texts, request_embedding)],
+        "prompt_fitness": [t.to_dict() for t in fitness.evaluate(prompts, request_embedding)],
+        "sanitization_drift": drift,
+        "convergence": {"best": result.best_history, "mean": result.mean_history},
+        "generations_run": result.generations_run,
+        "evolution_cost": evolution_cost,
+        "prompt_generation_cost": generation_cost,
+        "generation_queries": {"target": 0, "judge": 0, "auxiliary_llm": len(generated)},
+        "seed": args.seed,
+        "config": {
+            **asdict(config),
+            "approach": args.approach,
+            "gapi_mode": args.gapi_mode if args.approach == "gapi_s" else None,
+            "knn_k": fitness.k,
+            "lambda_rel": fitness.lambda_rel,
+            "lambda_nov": fitness.lambda_nov,
+            "tau": fitness.tau,
+        },
+    }
+
+
+def get_gapi_results(args, method, monitor):
+    """Gera os prompts do GAPI para os pedidos do HarmBench (mesmo protocolo do PI).
+
+    Args:
+        args: argumentos da linha de comando.
+        method: nome do método (chave nos resultados).
+        monitor: PerfomanceMonitor.
+
+    Returns:
+        Lista com um dict {método: resultados} por pedido.
+    """
+    config = GAConfig()
+    rng = random.Random(args.seed)
+    sentence_model = intialize_sentence_transformer()
+    data = load_data()
+    fitness = KnnFitness(sentence_model, data, lambda_rel=args.lambda_rel, lambda_nov=args.lambda_nov)
+    sanitizer = LocalModelTransformers(SANITIZER_MODEL_NAME) if args.approach == "gapi_s" else None
+    requests = load_requests(size=args.n_requests)
+    requests_embeddings = np.array(sentence_model.encode(requests, show_progress_bar=False))
+    all_new_prompts = []
+    for request in tqdm(requests, desc=f"Getting {method} results..."):
+        _, _, sim_prompts, _ = find_n_similar(sentence_model, request, requests_embeddings, 10, requests, data)
+        base_prompts, base_scores = get_base_prompts_and_scores(sim_prompts, data)
+        result, individuals, evolution_cost = evolve_request(fitness, request, sim_prompts, config, rng, args.approach, monitor)
+        generated, generation_cost = [], None
+        if sanitizer:
+            generated, generation_cost = sanitize_individuals(sanitizer, request, individuals, args.gapi_mode, monitor)
+        all_new_prompts.append({method: build_gapi_entry(
+            args, config, fitness, request, base_prompts, base_scores,
+            individuals, result, generated, evolution_cost, generation_cost
+        )})
+    del sanitizer
+    gc.collect()
+    torch.cuda.empty_cache()
+    return all_new_prompts
+
+
+def run_gapi(args, targets):
+    """Executa uma configuração do GAPI: geração, pontuação no alvo/juiz e métricas de custo.
+
+    Grava <método>_seed<n>_generation.json, _scores.json e _monitor.json em args.output_dir.
+
+    Args:
+        args: argumentos da linha de comando.
+        targets: modelos alvo para get_new_scores.
+    """
+    set_seed(args.seed)
+    method = gapi_method_name(args)
+    run_prefix = os.path.join(args.output_dir, f"{method}_seed{args.seed}")
+    os.makedirs(args.output_dir, exist_ok=True)
+    monitor = PerfomanceMonitor()
+    new_prompts = get_gapi_results(args, method, monitor)
+    with open(f"{run_prefix}_generation.json", "w", encoding="utf-8") as f:
+        json.dump(new_prompts, f, ensure_ascii=False, indent=4)
+    if not args.skip_scoring:
+        monitor.start_operation("evaluation")
+        get_new_scores(new_prompts, targets=targets, output_dir=f"{run_prefix}_scores.json")
+        monitor.end_operation()
+    monitor.save_metrics(f"{run_prefix}_monitor.json")
+
+
+if __name__ == "__main__":
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     parser = argparse.ArgumentParser()
     parser.add_argument("--multipletargets", help="Flag to evaluate in multiple targets", action="store_true")
+    parser.add_argument("--approach", choices=["gapi_s", "gapi_l"], help="Roda o GAPI em vez de pontuar as gerações do PI")
+    parser.add_argument("--gapi_mode", choices=["top5", "top1x5"], default="top5", help="Entradas do sanitizador no GAPI-S")
+    parser.add_argument("--n_requests", type=int, default=100, help="Pedidos do HarmBench (load_requests)")
+    parser.add_argument("--seed", type=int, default=0, help="Semente do GA e do sanitizador")
+    parser.add_argument("--lambda_rel", type=float, default=0.5, help="Peso da relevância na fitness (0 = ablação)")
+    parser.add_argument("--lambda_nov", type=float, default=1.0, help="Peso da novidade na fitness (0 = ablação)")
+    parser.add_argument("--output_dir", default="results_gapi", help="Pasta de saída do GAPI")
+    parser.add_argument("--skip_scoring", action="store_true", help="GAPI: só gera os prompts, sem alvo e juiz")
     args = parser.parse_args()
     if args.multipletargets:
         targets = [
@@ -620,10 +815,13 @@ if __name__ == "__main__":
         ]
     else:
         targets = ["meta-llama/Llama-3.1-8B-Instruct"]
-    #new_prompts = get_approaches_results(output_dir="results_100_requests/qwen_get_approaches_results.json")
-    with open("results_100_requests/get_approaches_results.json", "r", encoding="utf-8") as f:
-        new_prompts = json.load(f)
-    scored_prompt_list = get_new_scores(new_prompts, targets=targets)
+    if args.approach:
+        run_gapi(args, targets)
+    else:
+        #new_prompts = get_approaches_results(output_dir="results_100_requests/qwen_get_approaches_results.json")
+        with open("results_100_requests/get_approaches_results.json", "r", encoding="utf-8") as f:
+            new_prompts = json.load(f)
+        scored_prompt_list = get_new_scores(new_prompts, targets=targets)
 
     #simulated_annealing_results = simulated_annealing(scored_prompt_list)
     #simulated_annealing_results_with_score = get_simulated_annealing_scores(simulated_annealing_results)
