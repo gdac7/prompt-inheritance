@@ -211,9 +211,75 @@ class LocalModelTransformers():
         if self.prompt_generation_count % 3 == 0:
             torch.cuda.empty_cache()
         return final_responses, metrics_dict
-    
-        
-    
+
+    def batch_generate_from_templates(self, templates: list, monitor=None):
+        """Gera uma resposta para cada template, com entradas distintas em um único lote.
+
+        Usado pelo GAPI-S no modo top5: os 5 indivíduos são sanitizados juntos, como as 5 amostras
+        do PI em batch_generate_prompts. Temperatura e max_tokens vêm do primeiro template.
+
+        Args:
+            templates: lista de PromptTemplate.
+            monitor: PerfomanceMonitor com start_operation já chamado, ou None.
+
+        Returns:
+            Tupla (lista de dicts como em batch_generate_prompts, métricas do monitor ou None).
+        """
+        generation_params = {
+            "max_new_tokens": templates[0].max_tokens,
+            "pad_token_id": self.tokenizer.eos_token_id
+        }
+        if templates[0].temperature > 0.0:
+            generation_params["do_sample"] = True
+            generation_params["temperature"] = templates[0].temperature
+        batch_plain_text = [self._chat_text(t.user_prompt, t.system_prompt) + t.condition for t in templates]
+        with torch.inference_mode():
+            inputs = self.tokenizer(batch_plain_text, return_tensors="pt", padding=True)
+            inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
+            output_ids = self.model.generate(**inputs, **generation_params)
+            padded_length = inputs['input_ids'].shape[1]
+            final_responses = []
+            for i in range(len(output_ids)):
+                decoded_text = self.tokenizer.decode(output_ids[i][padded_length:], skip_special_tokens=True).strip()
+                processed_response = self.wrapper(decoded_text)
+                input_length = int(inputs['attention_mask'][i].sum())
+                output_length = len(self.tokenizer.encode(processed_response, add_special_tokens=False))
+                final_responses.append({
+                    "response": processed_response,
+                    "input_tokens_len": input_length,
+                    "output_tokens_len": output_length,
+                    "total_tokens_len": input_length + output_length
+                })
+        metrics_dict = None
+        if monitor:
+            _, metrics_dict = monitor.end_operation(tokens=sum(r["total_tokens_len"] for r in final_responses))
+        del inputs
+        del output_ids
+        torch.cuda.empty_cache()
+        return final_responses, metrics_dict
+
+    def _chat_text(self, user_prompt: str, system_prompt: str = None):
+        """Aplica o chat template do tokenizer (ou concatena os textos, se não houver template).
+
+        Args:
+            user_prompt: mensagem do usuário.
+            system_prompt: mensagem de sistema, opcional.
+
+        Returns:
+            Texto pronto para tokenizar, terminando no início da resposta do assistente.
+        """
+        if getattr(self.tokenizer, "chat_template", None) is not None:
+            messages = [{"role": "user", "content": user_prompt}]
+            if system_prompt:
+                messages.insert(0, {"role": "system", "content": system_prompt})
+            try:
+                return self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+            except Exception:
+                pass
+        return f"{system_prompt}\n\n{user_prompt}" if system_prompt else user_prompt
+
+
+
 
         
         
