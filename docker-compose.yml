@@ -21,3 +21,14 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+
+  # Protocolo completo do GAPI (test/run_gapi_experiments.sh); PI_RESULTS e PI_CLASSIFICATIONS
+  # apontam, a partir de test/, para os resultados antigos do PI usados na comparação
+  gapi:
+    extends: pi
+    command: bash run_gapi_experiments.sh
+    environment:
+      - PI_RESULTS=${PI_RESULTS:-}
+      - PI_CLASSIFICATIONS=${PI_CLASSIFICATIONS:-}
+      - SEEDS=${SEEDS:-0 1 2}
+      - N_REQUESTS=${N_REQUESTS:-100}
